@@ -7,6 +7,7 @@ find_package(Boost REQUIRED)
 include_directories(src)
 
 set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(use_shard_pqueue OFF CACHE BOOL "set USE_SHARD_PQUEUE")
 set(num_pqueue_shards 32 CACHE STRING "set NUM_PQUEUE_SHARDS")

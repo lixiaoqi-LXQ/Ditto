@@ -99,13 +99,9 @@ cd .. # -> third_party
 cd .. # -> install
 
 # install gtest
-if [ ! -d "/usr/src/gtest" ]; then
-  sudo apt install -y libgtest-dev
-fi
-cd /usr/src/gtest
-sudo cmake .
-sudo make
-sudo make install
+wget https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz -O googletest-1.14.0.tar.gz
+tar zxf googletest-1.14.0.tar.gz
+cd googletest-1.14.0 && mkdir build && cd build && cmake .. && sudo make install
 
 # install oh-my-zsh
 if [ ! -d '~/.oh-my-zsh' ]; then
@@ -115,30 +111,30 @@ echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.zshrc
 echo "ulimit -n unlimited" >> ~/.zshrc
 conda init zsh
 
-# setup-disk-part
-# use `sudo fdisk /dev/sda` to first delete all the partition
-# then carefully recreate it with a larger size at the same position
-echo "p
-d
+# # setup-disk-part
+# # use `sudo fdisk /dev/sda` to first delete all the partition
+# # then carefully recreate it with a larger size at the same position
+# echo "p
+# d
 
-d
+# d
 
-d
+# d
 
-d
+# d
 
-d
+# d
 
-n
-p
-1
+# n
+# p
+# 1
 
 
 
-No
-p
-w
-" | sudo fdisk /dev/sda
+# No
+# p
+# w
+# " | sudo fdisk /dev/sda
 
 # chsh
 sudo chsh $USER -s /bin/zsh
