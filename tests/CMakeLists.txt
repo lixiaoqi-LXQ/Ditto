@@ -1,11 +1,4 @@
-# include(FetchContent)
-# FetchContent_Declare(
-#   googletest
-#   URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-# )
-# FetchContent_MakeAvailable(googletest)
-# include(GoogleTest)
-
+set(CMAKE_PREFIX_PATH "/usr/local")
 find_package(GTest REQUIRED)
 
 include_directories(${GTEST_INCLUDE_DIRS})
@@ -103,7 +96,15 @@ target_compile_options(
     "-D_DEBUG"
 )
 
-gtest_discover_tests(
-    # test_dmc_utils
-    test_nm
-)
+# gtest_discover_tests(
+#     # test_dmc_utils
+#     test_nm
+# )
+gtest_discover_tests(test_dmc_utils)
+gtest_discover_tests(test_nm)
+gtest_discover_tests(test_server_mm)
+gtest_discover_tests(test_server)
+gtest_discover_tests(test_client_mm)
+gtest_discover_tests(test_client)
+gtest_discover_tests(test_cms)
+gtest_discover_tests(test_rlist)
