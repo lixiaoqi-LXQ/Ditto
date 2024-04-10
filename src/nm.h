@@ -40,6 +40,7 @@ class UDPNetworkManager {
 
   // private methods
  private:
+  // call ib_create_rc_qp, set arg qp_init_attr according to the role
   struct ibv_qp* create_rc_qp();
   int get_qp_info(struct ibv_qp* qp, __OUT QPInfo* qp_info);
 
@@ -66,12 +67,15 @@ class UDPNetworkManager {
   void close_udp_sock();
 
   // for server
+  // create a new qp for the request, \@qp_info holds output
   int nm_on_connect_new_qp(const UDPMsg* request, __OUT QPInfo* qp_info);
+  // connect 2 qp: local and remote
   int nm_on_connect_connect_qp(uint32_t client_id,
                                const QPInfo* local_qp_info,
                                const QPInfo* remote_qp_info);
 
   // for client
+  // client connect to the dest server, output MrInfo
   int client_connect_one_rc_qp(uint16_t server_id, __OUT MrInfo* mr_info);
 
   // rdma operations

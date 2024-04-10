@@ -19,11 +19,15 @@ TEST_F(ServerMMTest, test_init) {
 TEST_F(ServerMMTest, test_alloc) {
   int ret = 0;
   uint64_t allocated_bytes = 0;
-  for (int i = 0; i < 30; i++) {
+  // test allocate successfully and fails
+  for (int i = 0; i < mm_->get_free_space_len() / server_conf_.segment_size + 5; i++) {
     SegmentInfo alloc_info;
     ret = mm_->alloc_segment(1, &alloc_info);
     allocated_bytes += server_conf_.segment_size;
-    if (allocated_bytes > (server_conf_.server_data_len - HASH_SPACE_SIZE)) {
+    if (allocated_bytes > mm_->get_free_space_len()) {
+      if (ret != -1) {
+        printd(L_ERROR, "allocated_bytes: %lu", allocated_bytes);
+      }
       ASSERT_TRUE(ret == -1);
       continue;
     } else {

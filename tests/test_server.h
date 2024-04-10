@@ -18,6 +18,8 @@ class ServerTest : public DMCTest {
   pthread_t server_tid_;
   ServerMainArgs server_main_args_;
 
+  bool server_started {false};
+
  public:
   Server* server_;
   UDPNetworkManager* client_nm_;

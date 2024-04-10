@@ -44,6 +44,7 @@ static int load_ycsb_single(char* wl_name,
   std::vector<std::string> wl_list;
   char buf[2048];
   uint32_t cnt = 0;
+  // scatter operations(INSERT) to clients evenly
   while (fgets(buf, 2048, f) == buf) {
     if (buf[0] == '\n')
       continue;

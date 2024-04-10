@@ -45,11 +45,12 @@ class ServerMM {
   int get_mr_info(__OUT MrInfo* mr_info);
   inline uint64_t get_base_addr() { return base_addr_; }
   inline uint64_t get_stateful_area_addr() { return stateful_area_addr_; }
-  inline uint32_t get_stateful_area_len() { return stateful_area_len_; }
+  inline uint64_t get_stateful_area_len() { return stateful_area_len_; }
+  inline uint64_t get_free_space_addr() { return free_space_addr_; }
+  inline uint64_t get_free_space_len() { return free_space_len_; }
   inline float get_usage() {
     return 1 - ((float)free_segment_list_.size() / num_segments_);
   }
-  inline uint64_t get_free_addr() { return free_space_addr_; }
   inline void scale_memory(int reserved_idx) {
 #ifdef ELA_MEM_TPT
     assert(num_reserved_segments_ > 0);

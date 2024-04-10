@@ -296,7 +296,6 @@ int DMCClient::alloc_segment(KVOpsCtx* ctx) {
   if (server_oom_ == true) {
     return -1;
   }
-  num_udp_req_++;
   static uint32_t to_alloc_sid;
 
   printd(L_DEBUG, "Client allocating new segment");
@@ -336,6 +335,7 @@ int DMCClient::alloc_segment(KVOpsCtx* ctx) {
   }
   mm_->add_segment(reply.body.mr_info.addr, server_rkey_map_[sid], sid);
 
+  num_udp_req_++;
   to_alloc_sid++;
   return 0;
 #else
@@ -400,6 +400,7 @@ int DMCClient::connect_all_rc_qp() {
   return 0;
 }
 
+// setup key/val buffer and other parameters
 void DMCClient::create_op_ctx(__OUT KVOpsCtx* ctx,
                               void* key,
                               uint32_t key_size,
@@ -442,6 +443,7 @@ void DMCClient::create_op_ctx(__OUT KVOpsCtx* ctx,
   ctx->read_buf_laddr = ctx->bucket_laddr + sizeof(Bucket) * MAX_CHAIN_LEN;
 }
 
+// alloca 1 block through ClientMM, if no space left: ask server or evict
 void DMCClient::kv_set_alloc_rblock(KVOpsCtx* ctx) {
   printd(L_DEBUG, "kv_set_alloc_rblock");
   int ret = 0;
@@ -456,6 +458,7 @@ void DMCClient::kv_set_alloc_rblock(KVOpsCtx* ctx) {
   assert(ret == 0);
 }
 
+// use RDMA to: set kv, read bucket and read history counter (accordingly)
 void DMCClient::kv_set_read_index_write_kv(KVOpsCtx* ctx) {
   printd(L_DEBUG, "kv_set_read_index_write_kv");
   int ret = 0;
@@ -529,6 +532,7 @@ void DMCClient::kv_set_read_index_write_kv(KVOpsCtx* ctx) {
   }
 }
 
+// count fp matches, empties and history access...
 void DMCClient::match_fp_and_find_empty(KVOpsCtx* ctx) {
   printd(L_DEBUG, "match_fp_and_find_empty");
   uint32_t rkey = server_rkey_map_[0];
@@ -576,6 +580,7 @@ void DMCClient::match_fp_and_find_empty(KVOpsCtx* ctx) {
   }
 }
 
+// find and read matching kv, filling content in \@ctx
 void DMCClient::read_and_find_kv(KVOpsCtx* ctx) {
   printd(L_DEBUG, "read_and_find_kv");
 
@@ -618,6 +623,7 @@ void DMCClient::read_and_find_kv(KVOpsCtx* ctx) {
   }
 }
 
+// set my slot to 0 and free the rblock if my key is not the first key matched
 void DMCClient::kv_set_delete_duplicate(KVOpsCtx* ctx) {
   printd(L_DEBUG, "kv_set_delete_duplicate");
 
@@ -1184,6 +1190,7 @@ int DMCClient::evict_bucket_precise(KVOpsCtx* ctx) {
   return 0;
 }
 
+// randomly select 1 empty slot from previously detected empties
 void DMCClient::find_empty(KVOpsCtx* ctx) {
   printd(L_DEBUG, "find_empty");
   assert(ctx->num_free_slot > 0);
@@ -1200,6 +1207,7 @@ void DMCClient::find_empty(KVOpsCtx* ctx) {
   return;
 }
 
+// update hash table index and free old rblock
 void DMCClient::kv_set_update_index(KVOpsCtx* ctx) {
   printd(L_DEBUG, "kv_set_update_index");
   Slot* slot = (Slot*)(ctx->target_slot_laddr);
@@ -1576,6 +1584,7 @@ void DMCClient::update_priority(KVOpsCtx* ctx) {
   }
 }
 
+// use RDMA to: read bucket and read history counter (accordingly)
 void DMCClient::kv_get_read_index(KVOpsCtx* ctx) {
   printd(L_DEBUG, "kv_get");
   // construct rdma read bucket request
@@ -1767,6 +1776,8 @@ int DMCClient::evict(KVOpsCtx* ctx) {
   return ret;
 }
 
+// use experts to select victim from random sampled ones
+// will make slotAtomic to ADAPTIVE_TMP_SLOT, clear slotMeta, free rblock and insert history entry to FIFO list
 int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
@@ -1907,6 +1918,8 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
   return -1;
 }
 
+// use experts to select victim from random sampled ones
+// will make slotAtomic to ADAPTIVE_TMP_SLOT, free rblock and insert history entry to FIFO list
 int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
   printd(L_DEBUG, "evict adaptive naive");
   int ret = 0;
@@ -2026,6 +2039,8 @@ int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
   return -1;
 }
 
+// use RList to evict precisely
+// will reset slotAtomic, free rblock, clear slotMeta and maintain list entry
 int DMCClient::evict_precise(KVOpsCtx* ctx) {
   printd(L_DEBUG, "Evict precise!");
   int ret = 0;
@@ -2061,7 +2076,7 @@ int DMCClient::evict_precise(KVOpsCtx* ctx) {
   assert(ret == 0);
 
   // 5. clear slotMeta
-  uint32_t slotMeta_raddr = get_slot_raddr(victim_id) + SLOT_META_OFF;
+  uint64_t slotMeta_raddr = get_slot_raddr(victim_id) + SLOT_META_OFF;
   SlotMeta emptyMeta;
   memset(&emptyMeta, 0, sizeof(SlotMeta));
   nm_->rdma_inl_write_sid_sync(0, slotMeta_raddr, rkey, (uint64_t)&emptyMeta,
@@ -2069,6 +2084,8 @@ int DMCClient::evict_precise(KVOpsCtx* ctx) {
   return 0;
 }
 
+// evict from randomly selected ones
+// will reset slotAtomic and free rblock **only**
 int DMCClient::evict_sample_naive(KVOpsCtx* ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
@@ -2142,6 +2159,8 @@ int DMCClient::evict_sample_naive(KVOpsCtx* ctx) {
   return 0;
 }
 
+// use experts to select victim from random sampled ones
+// will make slot to lw_history_entry(kv_len 0xFF, HistID, expert_bmap) and free rblock
 int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
@@ -2297,6 +2316,8 @@ int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
   return -1;
 }
 
+// evict from randomly selected ones
+// will reset slotAtomic, free rblock, clear slotMeta and evict_callback
 int DMCClient::evict_sample(KVOpsCtx* ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;

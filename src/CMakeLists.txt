@@ -42,16 +42,16 @@ if(multi_policy)
     target_compile_definitions(libdmc PUBLIC MULTI_POLICY)
 endif()
 
-target_compile_options(
-    libdmc
+# target_compile_options(
+#     libdmc
 
-    # PRIVATE
-    PUBLIC
+#     # PRIVATE
+#     PUBLIC
 
-    # ${CMAKE_CXX_FLAGS_DEBUG}
-    # "-g"
-    # "-D_DEBUG"
-    "-O2"
-)
+#     # ${CMAKE_CXX_FLAGS_DEBUG}
+#     # "-g"
+#     # "-D_DEBUG"
+#     "-O2"
+# )
 
 target_link_libraries(libdmc PUBLIC ${Boost_LIBRARIES} boost_context boost_fiber ibverbs)

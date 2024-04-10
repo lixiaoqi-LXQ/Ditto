@@ -96,14 +96,16 @@ void ClientTest::kv_fuzz() {
       }
     } else {
       // set
-      gt_table[std::string(key_buf_)] = std::string(val_buf_);
       ret = client_->kv_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
                             strlen(val_buf_) + 1);
-      ASSERT_TRUE(ret == 0);
+      if (gt_table.find(std::string(key_buf_)) != gt_table.end())
+        ASSERT_TRUE(ret == 0);
+      else 
+        ASSERT_TRUE(ret == -1);
+      gt_table[std::string(key_buf_)] = std::string(val_buf_);
 
       uint32_t val_size;
-      ret =
-          client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
+      ret = client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
       ASSERT_TRUE(ret == 0);
       ASSERT_TRUE(strcmp(val_buf_, tmp_buf_) == 0);
     }
@@ -120,7 +122,7 @@ void ClientTest::kv_evict_get_set(int num_iter) {
     }
     ret = client_->kv_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
                           strlen(val_buf_) + 1);
-    ASSERT_TRUE(ret == 0);
+    ASSERT_TRUE(ret == -1);
 
     uint32_t tmp_len = 0;
     if ((i % 100) == 0) {
@@ -169,7 +171,7 @@ TEST_F(ClientTest, sample_lru_kv_exhaust_segment) {
     sprintf(val_buf_, "Val-%d", i);
     ret = client_->kv_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
                           strlen(val_buf_) + 1);
-    ASSERT_TRUE(ret == 0);
+    ASSERT_TRUE(ret == -1);
   }
 
   for (int i = 0; i < 70000; i++) {
@@ -212,31 +214,86 @@ TEST_F(ClientTest, sample_lru_kv_evict) {
   dump_counters();
 }
 
-TEST_F(ClientTest, cliquemap_lru_kv_fuzz) {
-  srand((uint32_t)time(NULL));
+TEST_F(ClientTest, sample_lru_test_combining) {
   int ret;
+  delete client_;
+  stop_server();
+  delete server_;
 
-  reconfig_cliquemap_test(false);
+  server_conf_.eviction_type = EVICT_SAMPLE;
+  server_conf_.eviction_priority = EVICT_PRIO_LRU;
+  server_conf_.use_freq_cache = true;
+  server_conf_.freq_cache_size = 10485760;
+  client_conf_.eviction_type = EVICT_SAMPLE;
+  client_conf_.eviction_priority = EVICT_PRIO_LRU;
+  client_conf_.use_freq_cache = true;
+  client_conf_.freq_cache_size = 10485760;
+
+  server_ = new Server(&server_conf_);
+  start_server();
+  client_ = new DMCClient(&client_conf_);
+
   kv_fuzz();
-}
-
-TEST_F(ClientTest, cliquemap_lru_kv_evict) {
-  int ret;
+  dump_counters();
+  printd(L_INFO, "==================");
 
   delete client_;
   stop_server();
   delete server_;
 
-  reconfig_evict_memory(EVICT_CLIQUEMAP);
-  server_conf_.eviction_type = EVICT_CLIQUEMAP;
-  client_conf_.eviction_type = EVICT_CLIQUEMAP;
+  server_conf_.eviction_type = EVICT_SAMPLE;
+  server_conf_.eviction_priority = EVICT_PRIO_LRU;
+  server_conf_.use_freq_cache = false;
+  client_conf_.eviction_type = EVICT_SAMPLE;
+  client_conf_.eviction_priority = EVICT_PRIO_LRU;
+  client_conf_.use_freq_cache = false;
+
+  server_ = new Server(&server_conf_);
+  start_server();
+  client_ = new DMCClient(&client_conf_);
+
+  kv_fuzz();
+  dump_counters();
+}
+
+TEST_F(ClientTest, sample_lfu_kv_fuzz) {
+  int ret;
+  delete client_;
+  stop_server();
+  delete server_;
+
+  server_conf_.eviction_type = EVICT_SAMPLE;
+  client_conf_.eviction_type = EVICT_SAMPLE;
+  server_conf_.eviction_priority = EVICT_PRIO_LFU;
+  client_conf_.eviction_priority = EVICT_PRIO_LFU;
+
+  server_ = new Server(&server_conf_);
+  start_server();
+  client_ = new DMCClient(&client_conf_);
+
+  kv_fuzz();
+}
+
+TEST_F(ClientTest, sample_lfu_kv_evict) {
+  int ret;
+  delete client_;
+  stop_server();
+  delete server_;
+
+  reconfig_evict_memory(EVICT_SAMPLE);
+  server_conf_.eviction_type = EVICT_SAMPLE;
+  server_conf_.eviction_priority = EVICT_PRIO_LFU;
+  client_conf_.eviction_type = EVICT_SAMPLE;
+  client_conf_.eviction_priority = EVICT_PRIO_LFU;
 
   server_ = new Server(&server_conf_);
   start_server();
   client_ = new DMCClient(&client_conf_);
 
   kv_evict_get_set(1000);
+  dump_counters();
 }
+
 
 TEST_F(ClientTest, precise_lru_kv_dumb_set_get) {
   int ret;
@@ -248,7 +305,7 @@ TEST_F(ClientTest, precise_lru_kv_dumb_set_get) {
     sprintf(val_buf_, "Val-%d", i);
     ret = client_->kv_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
                           strlen(val_buf_) + 1);
-    ASSERT_TRUE(ret == 0);
+    ASSERT_TRUE(ret == -1);
 
     uint32_t val_size;
     ret = client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
@@ -283,6 +340,81 @@ TEST_F(ClientTest, precise_lru_kv_evict) {
   client_ = new DMCClient(&client_conf_);
 
   kv_evict_get_set(1000);
+}
+
+TEST_F(ClientTest, precise_2s_load_lru_kv_fuzz) {
+  srand((uint32_t)time(NULL));
+  int ret;
+
+  delete client_;
+  stop_server();
+  delete server_;
+
+  server_conf_.eviction_type = EVICT_PRECISE;
+  server_conf_.eviction_priority = EVICT_PRIO_LRU;
+  client_conf_.eviction_type = EVICT_PRECISE;
+  client_conf_.eviction_priority = EVICT_PRIO_LRU;
+
+  server_ = new Server(&server_conf_);
+  start_server();
+  client_ = new DMCClient(&client_conf_);
+
+  std::map<std::string, std::string> gt_table;
+  for (int i = 0; i < 10; i++) {
+    sprintf(key_buf_, "Key-%d", i);
+    sprintf(val_buf_, "Val-%d", i);
+    ret = client_->kv_p_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
+                            strlen(val_buf_) + 1);
+    ASSERT_TRUE(ret == 0);
+  }
+
+  for (int i = 0; i < 10; i++) {
+    uint32_t val_size;
+    sprintf(key_buf_, "Key-%d", i);
+    sprintf(val_buf_, "Val-%d", i);
+    ret = client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
+    ASSERT_TRUE(ret == 0);
+    ASSERT_TRUE(strcmp(tmp_buf_, val_buf_) == 0);
+    ASSERT_TRUE(val_size == strlen(val_buf_) + 1);
+  }
+}
+
+TEST_F(ClientTest, precise_2s_load_lfu_kv_fuzz) {
+  srand((uint32_t)time(NULL));
+  int ret;
+
+  delete client_;
+  stop_server();
+  delete server_;
+
+  server_conf_.eviction_type = EVICT_PRECISE;
+  server_conf_.eviction_priority = EVICT_PRIO_LFU;
+  client_conf_.eviction_type = EVICT_PRECISE;
+  client_conf_.eviction_priority = EVICT_PRIO_LFU;
+  client_conf_.use_freq_cache = false;
+
+  server_ = new Server(&server_conf_);
+  start_server();
+  client_ = new DMCClient(&client_conf_);
+
+  std::map<std::string, std::string> gt_table;
+  for (int i = 0; i < 10; i++) {
+    sprintf(key_buf_, "Key-%d", i);
+    sprintf(val_buf_, "Val-%d", i);
+    ret = client_->kv_p_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
+                            strlen(val_buf_) + 1);
+    ASSERT_TRUE(ret == 0);
+  }
+
+  for (int i = 0; i < 10; i++) {
+    uint32_t val_size;
+    sprintf(key_buf_, "Key-%d", i);
+    sprintf(val_buf_, "Val-%d", i);
+    ret = client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
+    ASSERT_TRUE(ret == 0);
+    ASSERT_TRUE(strcmp(tmp_buf_, val_buf_) == 0);
+    ASSERT_TRUE(val_size == strlen(val_buf_) + 1);
+  }
 }
 
 TEST_F(ClientTest, precise_lfu_kv_evict) {
@@ -565,86 +697,6 @@ TEST_F(ClientTest, adaptive_kv_evict) {
   dump_counters();
 }
 
-TEST_F(ClientTest, sample_lru_test_combining) {
-  int ret;
-  delete client_;
-  stop_server();
-  delete server_;
-
-  server_conf_.eviction_type = EVICT_SAMPLE;
-  server_conf_.eviction_priority = EVICT_PRIO_LRU;
-  server_conf_.use_freq_cache = true;
-  server_conf_.freq_cache_size = 10485760;
-  client_conf_.eviction_type = EVICT_SAMPLE;
-  client_conf_.eviction_priority = EVICT_PRIO_LRU;
-  client_conf_.use_freq_cache = true;
-  client_conf_.freq_cache_size = 10485760;
-
-  server_ = new Server(&server_conf_);
-  start_server();
-  client_ = new DMCClient(&client_conf_);
-
-  kv_fuzz();
-  dump_counters();
-  printd(L_INFO, "==================");
-
-  delete client_;
-  stop_server();
-  delete server_;
-
-  server_conf_.eviction_type = EVICT_SAMPLE;
-  server_conf_.eviction_priority = EVICT_PRIO_LRU;
-  server_conf_.use_freq_cache = false;
-  client_conf_.eviction_type = EVICT_SAMPLE;
-  client_conf_.eviction_priority = EVICT_PRIO_LRU;
-  client_conf_.use_freq_cache = false;
-
-  server_ = new Server(&server_conf_);
-  start_server();
-  client_ = new DMCClient(&client_conf_);
-
-  kv_fuzz();
-  dump_counters();
-}
-
-TEST_F(ClientTest, sample_lfu_kv_fuzz) {
-  int ret;
-  delete client_;
-  stop_server();
-  delete server_;
-
-  server_conf_.eviction_type = EVICT_SAMPLE;
-  client_conf_.eviction_type = EVICT_SAMPLE;
-  server_conf_.eviction_priority = EVICT_PRIO_LFU;
-  client_conf_.eviction_priority = EVICT_PRIO_LFU;
-
-  server_ = new Server(&server_conf_);
-  start_server();
-  client_ = new DMCClient(&client_conf_);
-
-  kv_fuzz();
-}
-
-TEST_F(ClientTest, sample_lfu_kv_evict) {
-  int ret;
-  delete client_;
-  stop_server();
-  delete server_;
-
-  reconfig_evict_memory(EVICT_SAMPLE);
-  server_conf_.eviction_type = EVICT_SAMPLE;
-  server_conf_.eviction_priority = EVICT_PRIO_LFU;
-  client_conf_.eviction_type = EVICT_SAMPLE;
-  client_conf_.eviction_priority = EVICT_PRIO_LFU;
-
-  server_ = new Server(&server_conf_);
-  start_server();
-  client_ = new DMCClient(&client_conf_);
-
-  kv_evict_get_set(1000);
-  dump_counters();
-}
-
 TEST_F(ClientTest, cliquemap_lfu_kv_evict) {
   int ret;
   delete client_;
@@ -665,6 +717,32 @@ TEST_F(ClientTest, cliquemap_lfu_kv_evict) {
 
   kv_evict_get_set(1000);
   dump_counters();
+}
+
+TEST_F(ClientTest, cliquemap_lru_kv_fuzz) {
+  srand((uint32_t)time(NULL));
+  int ret;
+
+  reconfig_cliquemap_test(false);
+  kv_fuzz();
+}
+
+TEST_F(ClientTest, cliquemap_lru_kv_evict) {
+  int ret;
+
+  delete client_;
+  stop_server();
+  delete server_;
+
+  reconfig_evict_memory(EVICT_CLIQUEMAP);
+  server_conf_.eviction_type = EVICT_CLIQUEMAP;
+  client_conf_.eviction_type = EVICT_CLIQUEMAP;
+
+  server_ = new Server(&server_conf_);
+  start_server();
+  client_ = new DMCClient(&client_conf_);
+
+  kv_evict_get_set(1000);
 }
 
 TEST_F(ClientTest, cliquemap_precise_lru_kv_fuzz) {
@@ -720,79 +798,4 @@ TEST_F(ClientTest, cliquemap_precise_lru_kv_evict) {
 
   kv_evict_get_set(1000);
   dump_counters();
-}
-
-TEST_F(ClientTest, precise_2s_load_lru_kv_fuzz) {
-  srand((uint32_t)time(NULL));
-  int ret;
-
-  delete client_;
-  stop_server();
-  delete server_;
-
-  server_conf_.eviction_type = EVICT_PRECISE;
-  server_conf_.eviction_priority = EVICT_PRIO_LRU;
-  client_conf_.eviction_type = EVICT_PRECISE;
-  client_conf_.eviction_priority = EVICT_PRIO_LRU;
-
-  server_ = new Server(&server_conf_);
-  start_server();
-  client_ = new DMCClient(&client_conf_);
-
-  std::map<std::string, std::string> gt_table;
-  for (int i = 0; i < 10; i++) {
-    sprintf(key_buf_, "Key-%d", i);
-    sprintf(val_buf_, "Val-%d", i);
-    ret = client_->kv_p_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
-                            strlen(val_buf_) + 1);
-    ASSERT_TRUE(ret == 0);
-  }
-
-  for (int i = 0; i < 10; i++) {
-    uint32_t val_size;
-    sprintf(key_buf_, "Key-%d", i);
-    sprintf(val_buf_, "Val-%d", i);
-    ret = client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
-    ASSERT_TRUE(ret == 0);
-    ASSERT_TRUE(strcmp(tmp_buf_, val_buf_) == 0);
-    ASSERT_TRUE(val_size == strlen(val_buf_) + 1);
-  }
-}
-
-TEST_F(ClientTest, precise_2s_load_lfu_kv_fuzz) {
-  srand((uint32_t)time(NULL));
-  int ret;
-
-  delete client_;
-  stop_server();
-  delete server_;
-
-  server_conf_.eviction_type = EVICT_PRECISE;
-  server_conf_.eviction_priority = EVICT_PRIO_LFU;
-  client_conf_.eviction_type = EVICT_PRECISE;
-  client_conf_.eviction_priority = EVICT_PRIO_LFU;
-  client_conf_.use_freq_cache = false;
-
-  server_ = new Server(&server_conf_);
-  start_server();
-  client_ = new DMCClient(&client_conf_);
-
-  std::map<std::string, std::string> gt_table;
-  for (int i = 0; i < 10; i++) {
-    sprintf(key_buf_, "Key-%d", i);
-    sprintf(val_buf_, "Val-%d", i);
-    ret = client_->kv_p_set(key_buf_, strlen(key_buf_) + 1, val_buf_,
-                            strlen(val_buf_) + 1);
-    ASSERT_TRUE(ret == 0);
-  }
-
-  for (int i = 0; i < 10; i++) {
-    uint32_t val_size;
-    sprintf(key_buf_, "Key-%d", i);
-    sprintf(val_buf_, "Val-%d", i);
-    ret = client_->kv_get(key_buf_, strlen(key_buf_) + 1, tmp_buf_, &val_size);
-    ASSERT_TRUE(ret == 0);
-    ASSERT_TRUE(strcmp(tmp_buf_, val_buf_) == 0);
-    ASSERT_TRUE(val_size == strlen(val_buf_) + 1);
-  }
 }

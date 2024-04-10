@@ -19,6 +19,11 @@ set(multi_policy OFF CACHE BOOL "set MULTI_POLICY")
 set(hash_bucket_assoc 8 CACHE STRING "set HASH_BUCKET_ASSOC_NUM")
 set(hash_bucket_num 17170432 CACHE STRING "set HASH_NUM_BUCKETS")
 
+if (CMAKE_BUILD_TYPE MATCHES Debug)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
+    message("using Debug Mode, so set macro _DEBUG")
+endif()
+
 if(use_shard_pqueue)
     message("set USE_SHARD_PQUEUE")
     message("num_pqueue_shards=${num_pqueue_shards}")

@@ -6,9 +6,12 @@
 
 #include "dmc_utils.h"
 
+// get info about the device with id=dev_id 
 struct ibv_context* ib_get_ctx(uint32_t dev_id, uint32_t port_id);
+// use ib_pd and qp_init_attr to create a qp
 struct ibv_qp* ib_create_rc_qp(struct ibv_pd* ib_pd,
                                struct ibv_qp_init_attr* qp_init_attr);
+// connect local to remote (qp state: RST->INIT->RTR->RTS)
 int ib_connect_qp(struct ibv_qp* local_qp,
                   const QPInfo* local_qp_info,
                   const QPInfo* remote_qp_info,

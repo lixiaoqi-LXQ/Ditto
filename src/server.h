@@ -192,6 +192,10 @@ class Server {
     assert(elastic_mem_ == true);
     mm_->scale_memory(reserved_idx);
   }
+
+  // for test
+  ServerMM* get_server_mm() { return mm_; };
+
 };
 
 void* server_main(void* server_main_args);

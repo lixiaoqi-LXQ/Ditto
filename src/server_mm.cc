@@ -13,6 +13,9 @@
 #define MAP_HUGE_2MB (21 << MAP_HUGE_SHIFT)
 #define MAP_HUGE_1GB (30 << MAP_HUGE_SHIFT)
 
+// TODO: what is segment, block? And what is index and stateful area?
+// @segment is small areas in free space
+
 ServerMM::ServerMM(const DMCConfig* conf, struct ibv_pd* pd) {
   segment_size_ = conf->segment_size;
   base_addr_ = conf->server_base_addr;
@@ -43,10 +46,10 @@ ServerMM::ServerMM(const DMCConfig* conf, struct ibv_pd* pd) {
 
   printd(L_INFO,
          "ServerMM initialized with parameters:\n"
-         "\tsegment_size: %d, base_addr: 0x%lx, base_len: %ld \n"
-         "\tindex_area_addr: 0x%lx, index_area_len: %ld\n"
-         "\tstateful_area_addr: 0x%lx, stateful_area_len: %ld\n"
-         "\tfree_space_addr: 0x%lx, free_space_len: %ld",
+         "\tsegment_size: %u, base_addr: 0x%lx, base_len: %lu \n"
+         "\tindex_area_addr: 0x%lx, index_area_len: %lu\n"
+         "\tstateful_area_addr: 0x%lx, stateful_area_len: %lu\n"
+         "\tfree_space_addr: 0x%lx, free_space_len: %lu",
          segment_size_, base_addr_, base_len_, index_area_addr_,
          index_area_len_, stateful_area_addr_, stateful_area_len_,
          free_space_addr_, free_space_len_);

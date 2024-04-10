@@ -318,7 +318,7 @@ int UDPNetworkManager::rdma_write_sid_sync(uint16_t server,
   sr.wr.rdma.rkey = rkey;
 
   struct ibv_qp* qp = rc_qp_list_[server];
-  printd(L_DEBUG, "write %d@0x%lx with rkey %x", server, remote_addr, rkey);
+  printd(L_INFO, "write %d@0x%lx with rkey %x", server, remote_addr, rkey);
   int ret = ibv_post_send(qp, &sr, &bad_wr);
   assert(ret == 0);
 
@@ -360,7 +360,8 @@ int UDPNetworkManager::rdma_inl_write_sid_sync(uint16_t server,
   struct ibv_wc wc;
   ret = rdma_poll_one_send_completion_sync(&wc);
   if (wc.status != IBV_WC_SUCCESS) {
-    printd(L_ERROR, "WC status(%d) wrid(%ld)", wc.status, wc.wr_id);
+    printd(L_ERROR, "WC status(%d, %s) wrid(%ld)",
+      wc.status, ibv_wc_status_str(wc.status), wc.wr_id);
   }
   assert(wc.status == IBV_WC_SUCCESS);
   assert(wc.wr_id == 100);

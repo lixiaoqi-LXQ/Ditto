@@ -1,3 +1,5 @@
+// TODO: 
+// 1. Why use lock (only) in slot-related functions?
 #ifndef _DMC_LIST_H_
 #define _DMC_LIST_H_
 
@@ -81,21 +83,24 @@ class RList {
         uint32_t op_buf_size,
         uint32_t lkey,
         uint8_t type);
+  // update priority of \@slot_id to \@prio if *(\@slot_raddr)!=\@(expected_slot_val)
   void update(UDPNetworkManager* nm,
               uint32_t slot_id,
               double prio,
               uint64_t slot_raddr,
               uint64_t expected_slot_val);
+  // delete and clear entry with \@slot_id if *(\@slot_raddr)==0
   int delete_slot(UDPNetworkManager* nm, uint32_t slot_id, uint64_t slot_raddr);
 
   // get the slot offset in the bucket with the minimium priority
   int get_bucket_min(UDPNetworkManager* nm,
                      uint32_t bucket_init_id,
                      uint32_t assoc_num);
-  // get the minimum slot_id in the list
+  // get the slot_id with minimum priority in the list
   uint32_t get_list_min(UDPNetworkManager* nm);
   uint32_t size();
 
+  // insert \@slot_id(should be empty) to the front of the list
   void local_update(uint32_t slot_id, double prio);
 
   void printList(UDPNetworkManager* nm);

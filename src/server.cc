@@ -161,10 +161,10 @@ Server::Server(const DMCConfig* conf) {
            get_list_size(HASH_NUM_BUCKETS * HASH_BUCKET_ASSOC_NUM));
     if (prio_list_->size() > STATEFUL_SAPCE_SIZE) {
       printd(L_INFO, "%lx == %lx", base_addr + prio_list_->size(),
-             mm_->get_free_addr());
-      assert(base_addr + prio_list_->size() == mm_->get_free_addr());
+             mm_->get_free_space_addr());
+      assert(base_addr + prio_list_->size() == mm_->get_free_space_addr());
     } else {
-      assert(base_addr + STATEFUL_SAPCE_SIZE == mm_->get_free_addr());
+      assert(base_addr + STATEFUL_SAPCE_SIZE == mm_->get_free_space_addr());
     }
   }
 
@@ -493,6 +493,7 @@ void Server::p_update_priority(Slot* slot) {
   prio_list_->local_update(slot_id, new_priority);
 }
 
+// set without evicting anything (precisely)
 int Server::p_set(uint32_t worker_id,
                   void* key,
                   uint32_t key_size,

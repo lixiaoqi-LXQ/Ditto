@@ -55,6 +55,8 @@ class CMS {
     g_cnter = 0;
   }
 
+  ~CMS() { delete hashA_; }
+
   uint64_t estimate_count(uint64_t item) {
     uint64_t count = UINT64_MAX;
     for (int i = 0; i < depth_; i++) {

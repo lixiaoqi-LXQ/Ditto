@@ -6,6 +6,7 @@
 #include "ib.h"
 
 #include <assert.h>
+#include <string>
 #include <unistd.h>
 
 RList::RList(uint32_t num_slots,
@@ -377,6 +378,7 @@ void RList::update(UDPNetworkManager* nm,
 
   // 3. delete slot entry
   if (target.next != target.prev) {
+    // TODO: unnecessary action maybe
     delete_entry(nm, target_raddr, &target);
   }
 
@@ -556,7 +558,12 @@ void RList::printList(UDPNetworkManager* nm) {
     ret = nm->rdma_read_sid_sync(0, next_raddr, rkey_, (uint64_t)lentry, lkey_,
                                  sizeof(RListEntry));
     assert(ret == 0);
-    printd(L_INFO, "entry: %d (%lf, %d, %d)", next_id, lentry->priority,
+    std::string name = "entry";
+    if (next_id == head_slot_id_)
+      name = "head";
+    else if (next_id == tail_slot_id_)
+      name = "tail";
+    printd(L_INFO, "%s: %d (%lf, %d, %d)", name.c_str(), next_id, lentry->priority,
            lentry->prev, lentry->next);
     next_id = lentry->next;
     next_raddr = getEntryRaddr(next_id);

@@ -87,24 +87,24 @@ configure_file(
     COPYONLY
 )
 
-target_compile_options(
-    test_client
-    # PRIVATE
-    PUBLIC
-    ${CMAKE_CXX_FLAGS_DEBUG}
-    "-g"
-    "-D_DEBUG"
-)
+# target_compile_options(
+#     test_client
+#     # PRIVATE
+#     PUBLIC
+#     ${CMAKE_CXX_FLAGS_DEBUG}
+#     "-g"
+#     "-D_DEBUG"
+# )
 
 # gtest_discover_tests(
 #     # test_dmc_utils
 #     test_nm
 # )
-gtest_discover_tests(test_dmc_utils)
-gtest_discover_tests(test_nm)
-gtest_discover_tests(test_server_mm)
-gtest_discover_tests(test_server)
-gtest_discover_tests(test_client_mm)
-gtest_discover_tests(test_client)
-gtest_discover_tests(test_cms)
-gtest_discover_tests(test_rlist)
+gtest_discover_tests(test_dmc_utils) # all passed: dmc_table related
+gtest_discover_tests(test_nm) # all passed: use NetworkManager to connect server and client
+gtest_discover_tests(test_server_mm) # all passed: test server memory map
+gtest_discover_tests(test_client_mm) # all passed: test client memory map(to remote server)
+gtest_discover_tests(test_rlist) # all passed: test rlist function
+gtest_discover_tests(test_cms) # all passed
+gtest_discover_tests(test_server) # all passed
+gtest_discover_tests(test_client) # all passed

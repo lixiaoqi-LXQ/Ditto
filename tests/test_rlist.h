@@ -21,6 +21,8 @@ class RListTest : public NMTest {
   struct ibv_mr* check_buf_mr_;
   RList* server_rList_;
   RList* client_rList_;
+  void *server_buf_;
+  struct ibv_mr* server_buf_mr_;
 };
 
 #endif

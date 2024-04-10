@@ -78,7 +78,6 @@ void* rdma_connect_server(void* args) {
   assert(request.type == UDPMSG_REQ_CONNECT);
   assert(request.id == 1);
   UDPMsg reply;
-  reply.id = 0;
   reply.type = UDPMSG_REP_CONNECT;
   rc = nm->nm_on_connect_new_qp(&request, &reply.body.conn_info.qp_info);
   assert(rc == 0);
@@ -181,7 +180,7 @@ TEST_F(NMTest, rdma_combined_ts) {
   ASSERT_TRUE(true);
 
   struct ibv_pd* client_pd = client_nm_->get_ib_pd();
-  char buf[128];
+  char buf[128]={};
   struct ibv_mr* client_mr =
       ibv_reg_mr(client_pd, buf, 128, IBV_ACCESS_LOCAL_WRITE);
 
@@ -238,6 +237,7 @@ TEST_F(NMTest, rdma_combined_ts) {
   ASSERT_TRUE(ret == 0);
   printd(L_INFO, "server content: 0x%lx", *(uint64_t*)server_mr_info.addr);
   ASSERT_TRUE(*(uint64_t*)server_mr_info.addr == 0x0002000000001234ll);
+  ASSERT_TRUE(*(uint64_t*)client_mr->addr == 0x1234ll);
 
   cas_sge.addr = (uint64_t)client_mr->addr;
   cas_sge.length = 8;
@@ -256,18 +256,21 @@ TEST_F(NMTest, rdma_combined_ts) {
   ASSERT_TRUE(ret == 0);
   printd(L_INFO, "server content: %lx", *(uint64_t*)server_mr_info.addr);
   ASSERT_TRUE(*(uint64_t*)server_mr_info.addr == 0x0100000000000000ll);
+  ASSERT_TRUE(*(uint64_t*)client_mr->addr == 0x0002000000001234ll);
 
   faa_wr.wr.atomic.compare_add = (1ll << 48);
   ret = client_nm_->rdma_post_send_sid_sync(&faa_wr, 0);
   ASSERT_TRUE(ret == 0);
   printd(L_INFO, "server content: 0x%lx", *(uint64_t*)server_mr_info.addr);
   ASSERT_TRUE(*(uint64_t*)server_mr_info.addr == 0x0101000000000000ll);
+  ASSERT_TRUE(*(uint64_t*)client_mr->addr == 0x0100000000000000ll);
 
   faa_wr.wr.atomic.compare_add = (-1ull << 56);
   ret = client_nm_->rdma_post_send_sid_sync(&faa_wr, 0);
   ASSERT_TRUE(ret == 0);
   printd(L_INFO, "server content: 0x%lx", *(uint64_t*)server_mr_info.addr);
   ASSERT_TRUE(*(uint64_t*)server_mr_info.addr == 0x0001000000000000ll);
+  ASSERT_TRUE(*(uint64_t*)client_mr->addr == 0x0101000000000000ll);
 
   read_sge.addr = (uint64_t)buf;
   read_sge.length = 8;
@@ -282,5 +285,6 @@ TEST_F(NMTest, rdma_combined_ts) {
   read_wr.wr.rdma.rkey = server_mr_info.rkey;
   ret = client_nm_->rdma_post_send_sid_sync(&read_wr, 0);
   ASSERT_TRUE(ret == 0);
+  ASSERT_TRUE(*(uint64_t*)client_mr->addr == 0x0001000000000000ll);
   printd(L_INFO, "local content: 0x%lx", *(uint64_t*)buf);
 }

@@ -1,8 +1,9 @@
 #include "dmc_test.h"
+#include "nm.h"
 
 void DMCTest::setup_server_conf() {
   server_conf_.role = SERVER;
-  server_conf_.conn_type = IB;
+  server_conf_.conn_type = ROCE;
   server_conf_.server_id = 0;
   server_conf_.udp_port = 2333;
   server_conf_.memory_num = 1;
@@ -19,7 +20,7 @@ void DMCTest::setup_server_conf() {
   server_conf_.num_samples = 5;
 
   server_conf_.server_base_addr = 0x10000000;
-  server_conf_.server_data_len = 4ll * GB;
+  server_conf_.server_data_len = 15ll * GB;
   server_conf_.segment_size = 64ll * MB;
   server_conf_.block_size = 256;
 
@@ -30,7 +31,7 @@ void DMCTest::setup_server_conf() {
 
 void DMCTest::setup_client_conf() {
   client_conf_.role = CLIENT;
-  client_conf_.conn_type = IB;
+  client_conf_.conn_type = ROCE;
   client_conf_.server_id = 1;
   client_conf_.udp_port = 2333;
   client_conf_.memory_num = 1;

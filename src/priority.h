@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdint.h>
 
+// Update access info
 #define UPD_TS (1)
 #define UPD_FREQ (1 << 1)
 #define UPD_LAT (1 << 2)
