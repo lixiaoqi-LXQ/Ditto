@@ -28,6 +28,12 @@ class CMDManager(object):
             except:
                 pass
 
+    def execute_once(self, cmd):
+        """
+        for the case that all instances run on a single machine
+        """
+        return self._conn_list[0].run(f'{env_cmd} && {cmd}')
+
     def execute_on_node(self, node_id, cmd, asynchronous=True):
         return self._conn_list[node_id].run(f'{env_cmd} && {cmd}', asynchronous=asynchronous)
 

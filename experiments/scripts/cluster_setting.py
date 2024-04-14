@@ -1,4 +1,5 @@
-cluster_ips = [f'node-{i}' for i in range(10)]
+# cluster_ips = [f'node-{i}' for i in range(10)]
+cluster_ips = ['localhost'] * 10
 master_id = 0
 mn_id = 1
 client_ids = [i for i in range(2, 10)]
@@ -7,7 +8,7 @@ default_fc_size = 10*1024*1024
 
 NUM_CLIENT_PER_NODE = 32
 
-EXP_HOME = 'Ditto'
+EXP_HOME = '~/Ditto'
 build_dir = f'{EXP_HOME}/build'
 config_dir = f'{EXP_HOME}/experiments'
 

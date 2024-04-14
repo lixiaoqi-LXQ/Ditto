@@ -213,7 +213,7 @@ void* client_micro_main(void* _args) {
     if (args->validate && ret == 0) {
       assert(tmp_len == strlen(val_buf) + 1);
       if (memcmp(tmp_buf, val_buf, tmp_len) != 0) {
-        printf("get: %s != expected: %s\n", tmp_buf, val_buf);
+        printd(L_INFO, "get: %s != expected: %s\n", tmp_buf, val_buf);
       }
     }
     if (ret == 0)
@@ -272,7 +272,7 @@ void* client_micro_main(void* _args) {
   res_str = res.dump();
   con_client.memcached_put_result((void*)res_str.c_str(),
                                   strlen(res_str.c_str()), args->cid);
-  printf("Client %d finish\n", args->cid);
+  printd(L_INFO, "Client %d finish\n", args->cid);
 
   return NULL;
 }
@@ -329,7 +329,7 @@ void* client_hit_rate_real(void* _args) {
     if (diff_ts_us(&tet, &st) > 10LL * 1000000)
       break;
   }
-  printf("client %d warmup %d ops\n", args->cid, warmup_seq);
+  printd(L_INFO, "client %d warmup %d ops\n", args->cid, warmup_seq);
 
   // sync to start testing
   printd(L_INFO, "Client %d wait for start", args->cid);
@@ -393,7 +393,7 @@ void* client_hit_rate_real(void* _args) {
   con_client.memcached_put_result((void*)res_str.c_str(),
                                   strlen(res_str.c_str()), args->cid);
 
-  printf("Client %d miss rate: %f\n", args->cid, (float)n_miss / n_op);
+  printd(L_INFO, "Client %d miss rate: %f\n", args->cid, (float)n_miss / n_op);
   return NULL;
 }
 
@@ -531,12 +531,12 @@ void* client_hit_rate(void* _args) {
   con_client.memcached_put_result((void*)res_str.c_str(),
                                   strlen(res_str.c_str()), args->cid);
 
-  printf("Client %d miss rate: %f\n", args->cid, (float)n_miss / n_op);
-  printf(
+  printd(L_INFO, "Client %d miss rate: %f\n", args->cid, (float)n_miss / n_op);
+  printd(L_INFO, 
       "n_get: %d, n_set: %d\nn_get_miss: %d, n_set_miss: %d, n_set_miss_c: "
       "%d\n",
       n_get, n_set, n_get_miss, n_set_miss, client->n_set_miss_);
-  printf("n_miss: %d, n_eviction: %d\n", n_miss, client->num_evict_);
+  printd(L_INFO, "n_miss: %d, n_eviction: %d\n", n_miss, client->num_evict_);
   return NULL;
 }
 
@@ -593,7 +593,7 @@ void* client_ycsb_ela_mem(void* _args) {
       assert(*(uint32_t*)tmp_buf == *(uint32_t*)val_addr);
     }
     if (client->num_evict_ != 0 || client->num_bucket_evict_ != 0) {
-      printf("Evicted during load!");
+      printd(L_INFO, "Evicted during load!");
       abort();
     }
   }
@@ -612,7 +612,7 @@ void* client_ycsb_ela_mem(void* _args) {
   printd(L_INFO, "client %d waiting sync", args->cid);
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
-  printf("Client %d started trans\n", args->cid);
+  printd(L_INFO, "Client %d started trans\n", args->cid);
 
   uint32_t seq = 0;
   uint32_t n_get = 0;
@@ -652,7 +652,7 @@ void* client_ycsb_ela_mem(void* _args) {
       cur_tick++;
     }
   }
-  printf("Client %d finish\n", args->cid);
+  printd(L_INFO, "Client %d finish\n", args->cid);
   json trans_res;
   trans_res["ops_cont"] = json(ops_list);
   trans_res["num_ticks"] = num_ticks;
@@ -660,8 +660,8 @@ void* client_ycsb_ela_mem(void* _args) {
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client sync: %ld\n", client->num_cliquemap_sync_);
-  printf("Item size: %ld\n", str.size());
+  printd(L_INFO, "Client sync: %ld\n", client->num_cliquemap_sync_);
+  printd(L_INFO, "Item size: %ld\n", str.size());
   return NULL;
 }
 
@@ -718,7 +718,7 @@ void* client_ycsb_ela_cpu(void* _args) {
       assert(*(uint32_t*)tmp_buf == *(uint32_t*)val_addr);
     }
     if (client->num_evict_ != 0 || client->num_bucket_evict_ != 0) {
-      printf("Evicted during load!");
+      printd(L_INFO, "Evicted during load!");
       abort();
     }
   }
@@ -739,7 +739,7 @@ void* client_ycsb_ela_cpu(void* _args) {
   con_client.memcached_sync_ready(args->cid);
   if (args->cid > 32)
     con_client.memcached_wait("scale-to-64");
-  printf("Client %d started trans\n", args->cid);
+  printd(L_INFO, "Client %d started trans\n", args->cid);
   if (args->is_load_only)
     return NULL;  // return loader thread
 
@@ -781,7 +781,7 @@ void* client_ycsb_ela_cpu(void* _args) {
       cur_tick++;
     }
   }
-  printf("Client %d finish\n", args->cid);
+  printd(L_INFO, "Client %d finish\n", args->cid);
   json trans_res;
   trans_res["ops_cont"] = json(ops_list);
   trans_res["num_ticks"] = num_ticks;
@@ -789,8 +789,8 @@ void* client_ycsb_ela_cpu(void* _args) {
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client sync: %ld\n", client->num_cliquemap_sync_);
-  printf("Item size: %ld\n", str.size());
+  printd(L_INFO, "Client sync: %ld\n", client->num_cliquemap_sync_);
+  printd(L_INFO, "Item size: %ld\n", str.size());
   return NULL;
 }
 
@@ -835,7 +835,7 @@ void client_ycsb_ela_mem_fiber_worker(ClientFiberArgs* args) {
 
   // sync to load ycsb dataset
   if (args->fb_id == 0) {
-    printf("Client %d-%d waiting sync\n", args->cid, args->fb_id);
+    printd(L_INFO, "Client %d-%d waiting sync\n", args->cid, args->fb_id);
     con_client.memcached_sync_ready(args->config->server_id);
     for (int i = 0; i < args->load_wl->num_ops; i++) {
       uint64_t key_addr, val_addr;
@@ -853,7 +853,7 @@ void client_ycsb_ela_mem_fiber_worker(ClientFiberArgs* args) {
       gettimeofday(&tet, NULL);
       lat_map[diff_ts_us(&tet, &tst)]++;
       if (client->num_evict_ != 0 || client->num_bucket_evict_ != 0) {
-        printf("Evicted during load!");
+        printd(L_INFO, "Evicted during load!");
         abort();
       }
     }
@@ -866,7 +866,7 @@ void client_ycsb_ela_mem_fiber_worker(ClientFiberArgs* args) {
   // sync to do trans
   lat_map.clear();
   std::vector<std::map<uint32_t, uint32_t>> lat_map_cont;
-  printf("client %d-%d wait sync\n", args->cid, args->fb_id);
+  printd(L_INFO, "client %d-%d wait sync\n", args->cid, args->fb_id);
   client->clear_counters();
   if (args->fb_id == 0) {
     con_client.memcached_sync_ready(args->cid);
@@ -875,7 +875,7 @@ void client_ycsb_ela_mem_fiber_worker(ClientFiberArgs* args) {
     con_client.increase_result_cntr();
     args->start_trans_barrier->wait();
   }
-  printf("client %d-%d start trans\n", args->cid, args->fb_id);
+  printd(L_INFO, "client %d-%d start trans\n", args->cid, args->fb_id);
 
   uint32_t seq = 0;
   uint32_t n_get = 0;
@@ -915,7 +915,7 @@ void client_ycsb_ela_mem_fiber_worker(ClientFiberArgs* args) {
       cur_tick++;
     }
   }
-  printf("Client %d finish\n", args->cid);
+  printd(L_INFO, "Client %d finish\n", args->cid);
   json trans_res;
   trans_res["ops_cont"] = json(ops_list);
   trans_res["num_ticks"] = num_ticks;
@@ -923,8 +923,8 @@ void client_ycsb_ela_mem_fiber_worker(ClientFiberArgs* args) {
   std::string str = trans_res.dump();
   con_client.memcached_put_result_fiber((void*)str.c_str(), strlen(str.c_str()),
                                         args->cid, args->fb_id);
-  printf("Item size: %ld\n", str.size());
-  printf("Client %d-%d finish\n", args->cid, args->fb_id);
+  printd(L_INFO, "Item size: %ld\n", str.size());
+  printd(L_INFO, "Client %d-%d finish\n", args->cid, args->fb_id);
 }
 
 void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
@@ -945,7 +945,7 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
 
   // sync to load ycsb dataset
   if (args->fb_id == 0) {
-    printf("Client %d-%d waiting sync\n", args->cid, args->fb_id);
+    printd(L_INFO, "Client %d-%d waiting sync\n", args->cid, args->fb_id);
     con_client.memcached_sync_ready(args->config->server_id);
     for (int i = 0; i < args->load_wl->num_ops; i++) {
       uint64_t key_addr, val_addr;
@@ -963,7 +963,7 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
       gettimeofday(&tet, NULL);
       lat_map[diff_ts_us(&tet, &tst)]++;
       if (client->num_evict_ != 0 || client->num_bucket_evict_ != 0) {
-        printf("Evicted during load!");
+        printd(L_INFO, "Evicted during load!");
         abort();
       }
     }
@@ -976,7 +976,7 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
   // sync to do trans
   lat_map.clear();
   std::vector<std::map<uint32_t, uint32_t>> lat_map_cont;
-  printf("client %d-%d wait sync\n", args->cid, args->fb_id);
+  printd(L_INFO, "client %d-%d wait sync\n", args->cid, args->fb_id);
   client->clear_counters();
   if (args->fb_id == 0) {
     con_client.memcached_sync_ready(args->cid);
@@ -987,7 +987,7 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
     con_client.increase_result_cntr();
     args->start_trans_barrier->wait();
   }
-  printf("client %d-%d start trans\n", args->cid, args->fb_id);
+  printd(L_INFO, "client %d-%d start trans\n", args->cid, args->fb_id);
 
   uint32_t seq = 0;
   uint32_t n_get = 0;
@@ -1027,7 +1027,7 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
       cur_tick++;
     }
   }
-  printf("Client %d finish\n", args->cid);
+  printd(L_INFO, "Client %d finish\n", args->cid);
   json trans_res;
   trans_res["ops_cont"] = json(ops_list);
   trans_res["num_ticks"] = num_ticks;
@@ -1035,8 +1035,8 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
   std::string str = trans_res.dump();
   con_client.memcached_put_result_fiber((void*)str.c_str(), strlen(str.c_str()),
                                         args->cid, args->fb_id);
-  printf("Item size: %ld\n", str.size());
-  printf("Client %d-%d finish\n", args->cid, args->fb_id);
+  printd(L_INFO, "Item size: %ld\n", str.size());
+  printd(L_INFO, "Client %d-%d finish\n", args->cid, args->fb_id);
 }
 
 void client_ycsb_fiber_worker(ClientFiberArgs* args) {
@@ -1057,7 +1057,7 @@ void client_ycsb_fiber_worker(ClientFiberArgs* args) {
 
   // sync to load ycsb dataset
   if (args->fb_id == 0) {
-    printf("Client %d-%d waiting sync\n", args->cid, args->fb_id);
+    printd(L_INFO, "Client %d-%d waiting sync\n", args->cid, args->fb_id);
     con_client.memcached_sync_ready(args->config->server_id);
     for (int i = 0; i < args->load_wl->num_ops; i++) {
       uint64_t key_addr, val_addr;
@@ -1075,7 +1075,7 @@ void client_ycsb_fiber_worker(ClientFiberArgs* args) {
       gettimeofday(&tet, NULL);
       lat_map[diff_ts_us(&tet, &tst)]++;
       if (client->num_evict_ != 0 || client->num_bucket_evict_ != 0) {
-        printf("Evicted during load!");
+        printd(L_INFO, "Evicted during load!");
         abort();
       }
     }
@@ -1087,7 +1087,7 @@ void client_ycsb_fiber_worker(ClientFiberArgs* args) {
 
   // sync to do trans
   lat_map.clear();
-  printf("client %d-%d wait sync\n", args->cid, args->fb_id);
+  printd(L_INFO, "client %d-%d wait sync\n", args->cid, args->fb_id);
   client->clear_counters();
   if (args->fb_id == 0) {
     con_client.memcached_sync_ready(args->cid);
@@ -1096,7 +1096,7 @@ void client_ycsb_fiber_worker(ClientFiberArgs* args) {
     con_client.increase_result_cntr();
     args->start_trans_barrier->wait();
   }
-  printf("client %d-%d start trans\n", args->cid, args->fb_id);
+  printd(L_INFO, "client %d-%d start trans\n", args->cid, args->fb_id);
 
   gettimeofday(&st, NULL);
   uint32_t seq = 0;
@@ -1123,7 +1123,7 @@ void client_ycsb_fiber_worker(ClientFiberArgs* args) {
       break;
     }
   }
-  printf("Client %d-%d finish\n", args->cid, args->fb_id);
+  printd(L_INFO, "Client %d-%d finish\n", args->cid, args->fb_id);
   json trans_res;
   trans_res["ops"] = seq;
   trans_res["lat_map"] = json(lat_map);
@@ -1321,7 +1321,7 @@ void* client_ycsb(void* _args) {
       assert(*(uint32_t*)tmp_buf == *(uint32_t*)val_addr);
     }
     if (client->num_evict_ != 0 || client->num_bucket_evict_ != 0) {
-      printf("Evicted during load!");
+      printd(L_INFO, "Evicted during load!");
       abort();
     }
   }
@@ -1340,12 +1340,16 @@ void* client_ycsb(void* _args) {
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
   if (args->is_load_only)
-    return NULL;  // return loader thread
+  {
+    printd(L_INFO, "client %d is load-only, exiting now", args->cid);
+    return NULL; // return loader thread
+  }
 
   gettimeofday(&st, NULL);
   uint32_t seq = 0;
   uint32_t n_get = 0;
   uint32_t n_set = 0;
+  uint32_t get_miss{0}, set_miss{0};
   while (true) {
     uint32_t idx = seq % trans_wl.num_ops;
     uint64_t key_addr, val_addr;
@@ -1359,6 +1363,8 @@ void* client_ycsb(void* _args) {
       n_get++;
       gettimeofday(&tst, NULL);
       ret = client->kv_get((void*)key_addr, key_size, tmp_buf, &tmp_len);
+      if (ret == -1)
+        get_miss++;
       gettimeofday(&tet, NULL);
       // assert(ret == 0); // disable this on ycsbd
     } else {
@@ -1366,6 +1372,8 @@ void* client_ycsb(void* _args) {
       gettimeofday(&tst, NULL);
       ret =
           client->kv_set((void*)key_addr, key_size, (void*)val_addr, val_size);
+      if (ret == -1)
+        set_miss++;
       gettimeofday(&tet, NULL);
     }
     lat_map[diff_ts_us(&tet, &tst)]++;
@@ -1374,7 +1382,7 @@ void* client_ycsb(void* _args) {
       break;
     }
   }
-  printf("Client %d finish\n", args->cid);
+  printd(L_INFO, "Client %d finish\n", args->cid);
   json trans_res;
   trans_res["ops"] = seq;
   trans_res["n_get"] = n_get;
@@ -1382,10 +1390,12 @@ void* client_ycsb(void* _args) {
   trans_res["n_retry"] = client->num_set_retry_;
   trans_res["n_evict"] = client->num_evict_;
   trans_res["lat_map"] = json(lat_map);
+  trans_res["get_miss"] = get_miss;
+  trans_res["set_miss"] = set_miss;
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client sync: %ld\n", client->num_cliquemap_sync_);
+  printd(L_INFO, "Client %d sync: %ld\n", args->cid, client->num_cliquemap_sync_);
   return NULL;
 }
 
@@ -1414,7 +1424,7 @@ void* client_mix_ela_cpu(void* _args) {
   uint32_t lfu_idx = 0;
   for (int i = 0; i <= 10; i++) {
     con_client.memcached_sync_ready(args->cid);
-    printf("Client %d start %d\n", args->cid, i);
+    printd(L_INFO, "Client %d start %d\n", args->cid, i);
     int num_lru = 10 - i;
     int num_lfu = i;
     uint32_t* cur_idx;
@@ -1467,7 +1477,7 @@ void* client_mix_ela_cpu(void* _args) {
     }
     num_execute_ops = num_execute_ops - num_warmup_ops;
     con_client.memcached_sync_ready(args->cid);
-    printf("Client %d execute %d ops\n", args->cid, num_execute_ops);
+    printd(L_INFO, "Client %d execute %d ops\n", args->cid, num_execute_ops);
     struct timeval st, et;
     gettimeofday(&st, NULL);
     while (ops < num_execute_ops) {
@@ -1533,7 +1543,7 @@ void* client_webmail_ela_cpu(void* _args) {
     }
     ret = load_workload("webmail-all", -1, args->cid, i, &wl);
     con_client.memcached_sync_ready(args->cid);
-    printf("Client %d start %d\n", args->cid, i);
+    printd(L_INFO, "Client %d start %d\n", args->cid, i);
     if (args->cid > i) {
       con_client.memcached_sync_ready(args->cid);
       ops_vec.push_back(0);
@@ -1676,7 +1686,7 @@ void* client_workload_real_ela_mem(void* _args) {
       break;
     }
   }
-  printf("client %d warmup %d ops\n", args->cid, warmup_seq);
+  printd(L_INFO, "client %d warmup %d ops\n", args->cid, warmup_seq);
 
   // sync for testing
   printd(L_INFO, "client %d waiting sync", args->cid);
@@ -1732,7 +1742,7 @@ void* client_workload_real_ela_mem(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
          (float)n_miss / seq);
   return NULL;
 }
@@ -1786,7 +1796,7 @@ void* client_workload_real_n(void* _args) {
     }
     warmup_seq++;
   }
-  printf("client %d warmup %d ops\n", args->cid, warmup_seq);
+  printd(L_INFO, "client %d warmup %d ops\n", args->cid, warmup_seq);
 
   // sync for testing
   printd(L_INFO, "client %d waiting sync", args->cid);
@@ -1885,7 +1895,7 @@ void* client_workload_real_n(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
          (float)n_miss / seq);
   return NULL;
 }
@@ -2013,7 +2023,7 @@ void* client_workload_change(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
          (float)n_miss / seq);
   return NULL;
 }
@@ -2067,7 +2077,7 @@ void* client_workload_real(void* _args) {
       break;
     }
   }
-  printf("client %d warmup %d ops\n", args->cid, warmup_seq);
+  printd(L_INFO, "client %d warmup %d ops\n", args->cid, warmup_seq);
 
   // sync for testing
   printd(L_INFO, "client %d waiting sync", args->cid);
@@ -2164,7 +2174,7 @@ void* client_workload_real(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printf("Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
          (float)n_miss / seq);
   return NULL;
 }
@@ -2186,13 +2196,13 @@ void* ela_mem_checker(void* _args) {
     num_sync = 4;
   }
 
-  printf("start checking (%d)\n", num_sync);
+  printd(L_INFO, "start checking (%d)\n", num_sync);
   for (int i = 0; i < num_sync; i++) {
     char sync_msg[256];
     sprintf(sync_msg, "client-scale-memory-%d", i);
-    printf("Check %s\n", sync_msg);
+    printd(L_INFO, "Check %s\n", sync_msg);
     con_client.memcached_wait(sync_msg);
-    printf("scale %s\n", sync_msg);
+    printd(L_INFO, "scale %s\n", sync_msg);
 #ifdef USE_FIBER
     for (int c = 0; c < args->num_clients * NUM_FB_PER_THREAD; c++) {
 #else
@@ -2318,5 +2328,6 @@ void run_client(const InitArgs* args) {
   for (int i = 0; i < args->num_client_threads; i++) {
     pthread_join(client_tid_list[i], NULL);
   }
-  pthread_join(checker_tid, NULL);
+  if (args->elastic == ELA_MEM)
+  	pthread_join(checker_tid, NULL);
 }

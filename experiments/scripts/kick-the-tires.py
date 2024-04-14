@@ -24,13 +24,13 @@ cmd_manager.execute_on_nodes(
 
 # set cache size configuration
 CACHE_CONFIG_CMD = get_cache_config_cmd(config_dir, "ycsb", None)
-cmd_manager.execute_all(CACHE_CONFIG_CMD)
+cmd_manager.execute_once(CACHE_CONFIG_CMD)
 # set freq_cache configuration
 FC_CONFIG_CMD = get_freq_cache_cmd(config_dir, default_fc_size)
-cmd_manager.execute_all(FC_CONFIG_CMD)
+cmd_manager.execute_once(FC_CONFIG_CMD)
 # set MN CPU
 MN_CPU_CMD = get_mn_cpu_cmd(config_dir, 1)
-cmd_manager.execute_all(MN_CPU_CMD)
+cmd_manager.execute_once(MN_CPU_CMD)
 
 # start experiment
 method_list = ['sample-adaptive']
@@ -38,7 +38,7 @@ client_num = int(sys.argv[1])
 workload = sys.argv[2]
 
 MAKE_CMD = get_make_cmd(build_dir, 'sample-adaptive', 'ycsb', None)
-cmd_manager.execute_all(MAKE_CMD)
+cmd_manager.execute_once(MAKE_CMD)
 
 print(
     f'Start executing sample-adaptive with {client_num} clients under {workload}')
@@ -67,8 +67,10 @@ for i in range(num_CN):
     c_prom_list.append(c_prom)
 
 # wait Clients and MN
-for c_prom in c_prom_list:
-    c_prom.join()
+for i, c_prom in enumerate(c_prom_list):
+    res = c_prom.join()
+    print(f"===============client-{i+1}-stdout===============")
+    print(f"client-{i+1}-stdout: {res.stdout}")
 mn_prom.join()
 
 raw_res = controller_prom.join()

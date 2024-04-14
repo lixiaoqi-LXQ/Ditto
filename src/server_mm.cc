@@ -13,6 +13,8 @@
 #define MAP_HUGE_2MB (21 << MAP_HUGE_SHIFT)
 #define MAP_HUGE_1GB (30 << MAP_HUGE_SHIFT)
 
+static const uint64_t _GB = 1024ull * 1024 * 1024;
+
 // TODO: what is segment, block? And what is index and stateful area?
 // @segment is small areas in free space
 
@@ -35,24 +37,35 @@ ServerMM::ServerMM(const DMCConfig* conf, struct ibv_pd* pd) {
   uint32_t list_size = get_list_size(HASH_NUM_BUCKETS * HASH_BUCKET_ASSOC_NUM);
   index_area_addr_ = base_addr_;
   index_area_len_ = HASH_SPACE_SIZE;
-  printd(L_INFO, "hash_size: %ld, %ld\n", index_area_len_,
-         ROUNDUP(sizeof(Table), 1024));
+  printd(L_INFO, "hash_size: %.2fGB, %lfGB\n", 
+         (double)index_area_len_ / _GB,
+         (double)ROUNDUP(sizeof(Table), 1024) / _GB);
   stateful_area_addr_ = base_addr_ + index_area_len_;
   stateful_area_len_ =
       STATEFUL_SAPCE_SIZE > list_size ? STATEFUL_SAPCE_SIZE : list_size;
   free_space_addr_ = stateful_area_addr_ + stateful_area_len_;
   free_space_len_ = base_len_ - index_area_len_ - stateful_area_len_;
-  printf("cache size: %ld\n", free_space_len_ / conf->block_size);
+  printf("cache size: %ld (blocks)\n", free_space_len_ / conf->block_size);
 
   printd(L_INFO,
          "ServerMM initialized with parameters:\n"
-         "\tsegment_size: %u, base_addr: 0x%lx, base_len: %lu \n"
-         "\tindex_area_addr: 0x%lx, index_area_len: %lu\n"
-         "\tstateful_area_addr: 0x%lx, stateful_area_len: %lu\n"
-         "\tfree_space_addr: 0x%lx, free_space_len: %lu",
+         "\tsegment_size: %uB, base_addr: 0x%lx, base_len: %.2fGB\n"
+         "\tindex_area_addr: 0x%lx, index_area_len: %.2fGB\n"
+         "\tstateful_area_addr: 0x%lx, stateful_area_len: %.2fGB\n"
+         "\tfree_space_addr: 0x%lx, free_space_len: %.2fGB",
+         segment_size_, base_addr_, (double)base_len_/_GB,
+         index_area_addr_, (double)index_area_len_/_GB,
+         stateful_area_addr_, (double)stateful_area_len_/_GB,
+         free_space_addr_, (double)free_space_len_/_GB);
+/*   printd(L_INFO,
+         "ServerMM initialized with parameters:\n"
+         "\tsegment_size: %uB, base_addr: 0x%lx, base_len: %luB\n"
+         "\tindex_area_addr: 0x%lx, index_area_len: %luB\n"
+         "\tstateful_area_addr: 0x%lx, stateful_area_len: %luB\n"
+         "\tfree_space_addr: 0x%lx, free_space_len: %luB",
          segment_size_, base_addr_, base_len_, index_area_addr_,
          index_area_len_, stateful_area_addr_, stateful_area_len_,
-         free_space_addr_, free_space_len_);
+         free_space_addr_, free_space_len_); */
 
   // register memory region
   int access_flag = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |

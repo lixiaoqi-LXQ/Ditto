@@ -41,7 +41,7 @@ static int load_ycsb_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   char ops_buf[64];
   char key_buf[64];
   for (int i = 0; i < wl->num_ops; i++) {
@@ -97,7 +97,7 @@ static int load_wiki_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   for (int i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%d %s %d %d", &ts, keybuf, &item_size,
            &feature);
@@ -149,7 +149,7 @@ static int load_cphy_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   uint64_t next_acc_time;
   for (uint64_t i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%ld %s %d %ld", &ts, keybuf, &obj_size,
@@ -203,7 +203,7 @@ static int load_ibm_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   for (uint64_t i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%lld %s %s %d", &ts, opbuf, keybuf, &obj_size);
     memcpy((void*)((uint64_t)wl->key_buf + i * 128), keybuf, 128);
@@ -259,7 +259,7 @@ static int load_fiu_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   for (uint64_t i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%s %s", keybuf, opbuf);
     memcpy((void*)((uint64_t)wl->key_buf + i * 128), keybuf, 128);
@@ -323,7 +323,7 @@ static int load_mix_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   for (uint64_t i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%s", keybuf);
     memcpy((void*)((uint64_t)wl->key_buf + i * 128), keybuf, 128);
@@ -373,7 +373,7 @@ static int load_changing_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   for (uint64_t i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%s", keybuf);
     memcpy((void*)((uint64_t)wl->key_buf + i * 128), keybuf, 128);
@@ -427,7 +427,7 @@ static int load_twitter_workload(char* workload_name,
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client %d loading %ld ops\n", server_id, wl_list.size());
+  printd(L_INFO, "Client %d loading %ld ops", server_id, wl_list.size());
   for (int i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%d %s %d %d %d %s %d", &ts, keybuf, &key_size,
            &val_size, &cid, opbuf, &ttl);
@@ -513,7 +513,7 @@ int load_workload_hit_rate(char* workload_name,
                            __OUT DMCWorkload* wl) {
   char real_workload_name[256];
   sscanf(workload_name, "hit-rate-%s", real_workload_name);
-  printf("%s\n", real_workload_name);
+  printd(L_INFO, "%s", real_workload_name);
   if (memcmp(real_workload_name, "twitter", strlen("twitter")) == 0) {
     load_twitter_workload(real_workload_name, num_load_ops, server_id,
                           all_client_num, wl);
@@ -547,7 +547,7 @@ int load_workload_hit_rate(char* workload_name,
 static int load_mix_individual_all(char* fname, __OUT DMCWorkload* wl) {
   FILE* f = fopen(fname, "r");
   assert(f != NULL);
-  printf("Client loading %s\n", fname);
+  printd(L_INFO, "Client loading %s", fname);
 
   std::vector<std::string> wl_list;
   char buf[2048];
@@ -570,7 +570,7 @@ static int load_mix_individual_all(char* fname, __OUT DMCWorkload* wl) {
   wl->val_size_list = (uint32_t*)malloc(sizeof(uint32_t) * wl->num_ops);
   wl->op_list = (uint8_t*)malloc(sizeof(uint8_t) * wl->num_ops);
 
-  printf("Client loading %ld ops\n", wl->num_ops);
+  printd(L_INFO, "Client loading %ld ops", wl->num_ops);
   for (uint64_t i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%s", keybuf);
     memcpy((void*)((uint64_t)wl->key_buf + i * 128), keybuf, 128);

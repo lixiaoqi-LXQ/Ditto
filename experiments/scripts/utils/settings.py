@@ -451,7 +451,7 @@ def get_cmake_cmd(method, wl, size, running_opts):
 
 def get_make_cmd(build_dir, method, wl, size, running_opts=running_default_opt):
     cmake_cmd = get_cmake_cmd(method, wl, size, running_opts)
-    return f"cd {build_dir} && {cmake_cmd} && make clean && make -j 8"
+    return f"cd {build_dir} && {cmake_cmd} && make clean && make -j"
 
 
 def get_cache_config_cmd(config_dir, wl, size):
