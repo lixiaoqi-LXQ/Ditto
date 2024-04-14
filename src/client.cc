@@ -1,7 +1,5 @@
+
 #include "client.h"
-#include "debug.h"
-#include "dmc_table.h"
-#include "ib.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -12,7 +10,11 @@
 #include <iostream>
 #include <vector>
 
-DMCClient::DMCClient(const DMCConfig* conf) {
+#include "debug.h"
+#include "dmc_table.h"
+#include "ib.h"
+
+DMCClient::DMCClient(const DMCConfig *conf) {
   evict_bucket_cnt_.clear();
   srand(conf->server_id);
   my_sid_ = conf->server_id;
@@ -61,7 +63,7 @@ DMCClient::DMCClient(const DMCConfig* conf) {
   printd(L_INFO, "new_ts32: %x", new_ts32());
 
   // allocate local mr
-  struct ibv_pd* pd = nm_->get_ib_pd();
+  struct ibv_pd *pd = nm_->get_ib_pd();
   local_buf_mr_ =
       ibv_reg_mr(pd, local_buf_, local_buf_size_,
                  IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
@@ -93,11 +95,11 @@ DMCClient::~DMCClient() {
   delete mm_;
 }
 
-int DMCClient::init_eviction(const DMCConfig* conf) {
+int DMCClient::init_eviction(const DMCConfig *conf) {
   if (eviction_type_ == EVICT_CLIQUEMAP) {
     gettimeofday(&last_sync_time_, NULL);
     num_experts_ = 1;
-    struct ibv_pd* pd = nm_->get_ib_pd();
+    struct ibv_pd *pd = nm_->get_ib_pd();
     // clique map initialization
     ts_buf_ = malloc(MSG_BUF_SIZE);
     assert(ts_buf_ != NULL);
@@ -106,9 +108,9 @@ int DMCClient::init_eviction(const DMCConfig* conf) {
     // construct ts message buffer
     // format [8b: msg_type, 16b: server_id, 8b: number of record]
     memset(ts_buf_, 0, MSG_BUF_SIZE);
-    *(uint8_t*)ts_buf_ = IBMSG_REQ_PRIORITY;
-    *(uint16_t*)((uint64_t)ts_buf_ + sizeof(uint8_t)) = my_sid_;
-    *(uint32_t*)((uint64_t)ts_buf_ + sizeof(uint8_t) + sizeof(uint16_t)) = 0;
+    *(uint8_t *)ts_buf_ = IBMSG_REQ_PRIORITY;
+    *(uint16_t *)((uint64_t)ts_buf_ + sizeof(uint8_t)) = my_sid_;
+    *(uint32_t *)((uint64_t)ts_buf_ + sizeof(uint8_t) + sizeof(uint16_t)) = 0;
     ts_buf_off_ = sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint32_t);
 
     ts_rep_buf_ = malloc(block_size_);
@@ -119,7 +121,7 @@ int DMCClient::init_eviction(const DMCConfig* conf) {
   } else if (eviction_type_ == EVICT_PRECISE) {
     num_experts_ = 1;
     use_freq_cache_ = false;
-    struct ibv_pd* pd = nm_->get_ib_pd();
+    struct ibv_pd *pd = nm_->get_ib_pd();
     list_op_buf_ = malloc(1024 * 1024);
     assert(list_op_buf_ != NULL);
     list_op_buf_mr_ =
@@ -142,13 +144,13 @@ int DMCClient::init_eviction(const DMCConfig* conf) {
       experts_[i] = dmc_new_priority(conf->experts[i]);
     learning_rate_ = conf->learning_rate;
 
-    struct ibv_pd* pd = nm_->get_ib_pd();
+    struct ibv_pd *pd = nm_->get_ib_pd();
 
     weights_raddr_ = server_base_addr_ + HASH_SPACE_SIZE;
     weights_sync_size = sizeof(float) * num_experts_ + sizeof(uint8_t);
     weights_sync_buf_ = malloc(weights_sync_size);
     assert(weights_sync_buf_ != NULL);
-    r_weights_ = (float*)((uint64_t)weights_sync_buf_ + sizeof(uint8_t));
+    r_weights_ = (float *)((uint64_t)weights_sync_buf_ + sizeof(uint8_t));
     weights_sync_buf_mr_ = ibv_reg_mr(pd, weights_sync_buf_, weights_sync_size,
                                       IBV_ACCESS_LOCAL_WRITE);
     assert(weights_sync_buf_mr_ != NULL);
@@ -160,11 +162,11 @@ int DMCClient::init_eviction(const DMCConfig* conf) {
     reward_sync_size_ = MSG_BUF_SIZE;
     reward_sync_buf_ = malloc(reward_sync_size_);
     memset(reward_sync_buf_, 0, reward_sync_size_);
-    reward_buf_ = (float*)((uint64_t)reward_sync_buf_ + sizeof(uint8_t) +
-                           sizeof(uint16_t));
+    reward_buf_ = (float *)((uint64_t)reward_sync_buf_ + sizeof(uint8_t) +
+                            sizeof(uint16_t));
     memset(reward_buf_, 0, sizeof(float) * num_experts_);
-    *(uint8_t*)reward_sync_buf_ = IBMSG_REQ_MERGE;
-    *(uint16_t*)((uint64_t)reward_sync_buf_ + sizeof(uint8_t)) = my_sid_;
+    *(uint8_t *)reward_sync_buf_ = IBMSG_REQ_MERGE;
+    *(uint16_t *)((uint64_t)reward_sync_buf_ + sizeof(uint8_t)) = my_sid_;
     reward_sync_buf_mr_ = ibv_reg_mr(pd, reward_sync_buf_, reward_sync_size_,
                                      IBV_ACCESS_LOCAL_WRITE);
     assert(reward_sync_buf_mr_ != NULL);
@@ -233,26 +235,23 @@ void DMCClient::clear_counters() {
   n_set_miss_ = 0;
   weight_vec_.clear();
   expert_evict_cnt_.clear();
-  for (int i = 0; i < 10; i++)
-    expert_evict_cnt_.push_back(0);
+  for (int i = 0; i < 10; i++) expert_evict_cnt_.push_back(0);
 #ifdef USE_REWARDS
   num_hit_rewards_ = 0;
   expert_reward_cnt_.resize(MAX_NUM_EXPERTS);
 #endif
 }
 
-void DMCClient::get_init_bucket_raddr(uint64_t hash,
-                                      __OUT uint64_t* r_addr,
-                                      __OUT uint16_t* server) {
+void DMCClient::get_init_bucket_raddr(uint64_t hash, __OUT uint64_t *r_addr,
+                                      __OUT uint16_t *server) {
   uint64_t bucket_id = hash % HASH_NUM_BUCKETS;
   *server = hash % num_servers_;
   *r_addr = bucket_id * sizeof(Bucket) + server_base_addr_;
 }
 
-void DMCClient::get_slot_raddr(const KVOpsCtx* ctx,
-                               uint64_t slot_laddr,
-                               __OUT uint64_t* slot_raddr,
-                               __OUT uint16_t* server) {
+void DMCClient::get_slot_raddr(const KVOpsCtx *ctx, uint64_t slot_laddr,
+                               __OUT uint64_t *slot_raddr,
+                               __OUT uint16_t *server) {
   uint32_t slot_gid =
       (slot_laddr - ctx->bucket_laddr) / sizeof(Slot);  // the global offset
   uint32_t bucket_id = slot_gid / HASH_BUCKET_ASSOC_NUM;
@@ -292,7 +291,7 @@ uint64_t DMCClient::get_sys_start_ts() {
   return reply.body.sys_start_ts;
 }
 
-int DMCClient::alloc_segment(KVOpsCtx* ctx) {
+int DMCClient::alloc_segment(KVOpsCtx *ctx) {
   if (server_oom_ == true) {
     return -1;
   }
@@ -317,8 +316,7 @@ int DMCClient::alloc_segment(KVOpsCtx* ctx) {
   int num_retry = 3;
   do {
     ret = nm_->recv_udp_msg(&reply, &r_addr, &r_addr_len);
-    if (ret != 0)
-      printd(L_INFO, "recv failed");
+    if (ret != 0) printd(L_INFO, "recv failed");
     num_retry--;
   } while (ret && num_retry > 0);
   if (ret != 0) {
@@ -339,8 +337,8 @@ int DMCClient::alloc_segment(KVOpsCtx* ctx) {
   to_alloc_sid++;
   return 0;
 #else
-  *(uint8_t*)ctx->op_laddr = IBMSG_REQ_ALLOC;
-  *(uint16_t*)((uint64_t)ctx->op_laddr + sizeof(uint8_t)) = my_sid_;
+  *(uint8_t *)ctx->op_laddr = IBMSG_REQ_ALLOC;
+  *(uint16_t *)((uint64_t)ctx->op_laddr + sizeof(uint8_t)) = my_sid_;
 
   // post rr first
   struct ibv_recv_wr rr;
@@ -374,10 +372,11 @@ int DMCClient::alloc_segment(KVOpsCtx* ctx) {
   assert(recv_wc.status == IBV_WC_SUCCESS);
   assert(recv_wc.opcode == IBV_WC_RECV);
   assert(recv_wc.wr_id == 1);
-  assert(*(uint8_t*)((uint64_t)ctx->op_laddr + block_size_) == IBMSG_REP_ALLOC);
+  assert(*(uint8_t *)((uint64_t)ctx->op_laddr + block_size_) ==
+         IBMSG_REP_ALLOC);
 
   uint64_t alloc_addr =
-      *(uint64_t*)(ctx->op_laddr + block_size_ + sizeof(uint8_t));
+      *(uint64_t *)(ctx->op_laddr + block_size_ + sizeof(uint8_t));
   if (alloc_addr == 0) {
     printd(L_INFO, "Server out-of-memory");
     server_oom_ = true;
@@ -401,12 +400,8 @@ int DMCClient::connect_all_rc_qp() {
 }
 
 // setup key/val buffer and other parameters
-void DMCClient::create_op_ctx(__OUT KVOpsCtx* ctx,
-                              void* key,
-                              uint32_t key_size,
-                              void* val,
-                              uint32_t val_size,
-                              uint8_t op_type) {
+void DMCClient::create_op_ctx(__OUT KVOpsCtx *ctx, void *key, uint32_t key_size,
+                              void *val, uint32_t val_size, uint8_t op_type) {
   memset(ctx, 0, sizeof(KVOpsCtx));
   ctx->op = op_type;
   ctx->key = key;
@@ -426,12 +421,12 @@ void DMCClient::create_op_ctx(__OUT KVOpsCtx* ctx,
 
   // construct local write buf
   memset(local_buf_, 0, sizeof(ObjHeader));
-  (*(ObjHeader*)local_buf_).key_size = key_size;
-  (*(ObjHeader*)local_buf_).val_size = val_size;
+  (*(ObjHeader *)local_buf_).key_size = key_size;
+  (*(ObjHeader *)local_buf_).val_size = val_size;
   uint64_t key_addr = (uint64_t)local_buf_ + sizeof(ObjHeader);
   uint64_t val_addr = key_addr + key_size;
-  memcpy((void*)key_addr, key, key_size);
-  memcpy((void*)val_addr, val, val_size);
+  memcpy((void *)key_addr, key, key_size);
+  memcpy((void *)val_addr, val, val_size);
   ctx->write_buf_laddr = (uint64_t)local_buf_;
   ctx->write_buf_size = 1024;
   ctx->target_block_laddr =
@@ -444,7 +439,7 @@ void DMCClient::create_op_ctx(__OUT KVOpsCtx* ctx,
 }
 
 // alloca 1 block through ClientMM, if no space left: ask server or evict
-void DMCClient::kv_set_alloc_rblock(KVOpsCtx* ctx) {
+void DMCClient::kv_set_alloc_rblock(KVOpsCtx *ctx) {
   printd(L_DEBUG, "kv_set_alloc_rblock");
   int ret = 0;
   ret = mm_->alloc(ctx->kv_size, &ctx->kv_remote_block);
@@ -459,12 +454,12 @@ void DMCClient::kv_set_alloc_rblock(KVOpsCtx* ctx) {
 }
 
 // use RDMA to: set kv, read bucket and read history counter (accordingly)
-void DMCClient::kv_set_read_index_write_kv(KVOpsCtx* ctx) {
+void DMCClient::kv_set_read_index_write_kv(KVOpsCtx *ctx) {
   printd(L_DEBUG, "kv_set_read_index_write_kv");
   int ret = 0;
 
   // write KV
-  struct ibv_send_wr* head_wr = NULL;
+  struct ibv_send_wr *head_wr = NULL;
   struct ibv_send_wr write_sr;
   struct ibv_sge write_sge;
   memset(&write_sr, 0, sizeof(struct ibv_send_wr));
@@ -482,8 +477,8 @@ void DMCClient::kv_set_read_index_write_kv(KVOpsCtx* ctx) {
   num_rdma_write_++;
 
   printd(L_DEBUG, "Writing (k_size: %d v_size: %d) to %d:0x%lx",
-         ((ObjHeader*)ctx->write_buf_laddr)->key_size,
-         ((ObjHeader*)ctx->write_buf_laddr)->val_size,
+         ((ObjHeader *)ctx->write_buf_laddr)->key_size,
+         ((ObjHeader *)ctx->write_buf_laddr)->val_size,
          ctx->kv_remote_block.server, ctx->kv_remote_block.addr);
 
   // read bucket request
@@ -528,26 +523,26 @@ void DMCClient::kv_set_read_index_write_kv(KVOpsCtx* ctx) {
   if (is_evict_adaptive(eviction_type_)) {
     // record history head
     ctx->has_read_hist_head = true;
-    ctx->read_hist_head = *(uint64_t*)ctx->op_laddr;
+    ctx->read_hist_head = *(uint64_t *)ctx->op_laddr;
   }
 }
 
 // count fp matches, empties and history access...
-void DMCClient::match_fp_and_find_empty(KVOpsCtx* ctx) {
+void DMCClient::match_fp_and_find_empty(KVOpsCtx *ctx) {
   printd(L_DEBUG, "match_fp_and_find_empty");
   uint32_t rkey = server_rkey_map_[0];
   uint32_t lkey = local_buf_mr_->lkey;
   ctx->num_fp_match = 0;
   ctx->num_free_slot = 0;
 
-  Slot* slot = (Slot*)ctx->bucket_laddr;
+  Slot *slot = (Slot *)ctx->bucket_laddr;
   std::vector<std::pair<double, uint64_t>> prio_slot_raddr[num_experts_];
   for (int j = 0; j < HASH_BUCKET_ASSOC_NUM; j++) {
     uint64_t kv_raddr = HashIndexConvert48To64Bits(slot[j].atomic.pointer);
     uint64_t slot_raddr = ctx->init_bucket_raddr + sizeof(Slot) * j;
     if ((eviction_type_ == EVICT_SAMPLE_ADAPTIVE_NAIVE ||
          eviction_type_ == EVICT_SAMPLE_ADAPTIVE_HEAVY) &&
-        *(uint64_t*)&slot[j] == ADAPTIVE_TMP_SLOT)
+        *(uint64_t *)&slot[j] == ADAPTIVE_TMP_SLOT)
       continue;  // continue if adaptive naive and is internal state
     if (eviction_type_ == EVICT_SAMPLE_ADAPTIVE &&
         lw_history_->is_in_history(&slot[j])) {
@@ -560,7 +555,7 @@ void DMCClient::match_fp_and_find_empty(KVOpsCtx* ctx) {
         num_hist_match_++;
         ctx->hist_match = true;
         ctx->hist_match_head = kv_raddr;
-        ctx->hist_expert_bmap = *(uint8_t*)&(slot[j].meta.acc_info.ins_ts);
+        ctx->hist_expert_bmap = *(uint8_t *)&(slot[j].meta.acc_info.ins_ts);
       }
       continue;
     }
@@ -581,13 +576,13 @@ void DMCClient::match_fp_and_find_empty(KVOpsCtx* ctx) {
 }
 
 // find and read matching kv, filling content in \@ctx
-void DMCClient::read_and_find_kv(KVOpsCtx* ctx) {
+void DMCClient::read_and_find_kv(KVOpsCtx *ctx) {
   printd(L_DEBUG, "read_and_find_kv");
 
   uint32_t rkey = server_rkey_map_[0];
   uint32_t lkey = local_buf_mr_->lkey;
 
-  Slot* slot = (Slot*)ctx->bucket_laddr;
+  Slot *slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < ctx->num_fp_match; i++) {
     uint32_t idx = ctx->remote_data_slot_id[i];
     uint64_t kv_raddr = HashIndexConvert48To64Bits(slot[idx].atomic.pointer);
@@ -598,7 +593,7 @@ void DMCClient::read_and_find_kv(KVOpsCtx* ctx) {
     if ((eviction_type_ == EVICT_SAMPLE_ADAPTIVE_NAIVE ||
          eviction_type_ == EVICT_SAMPLE_ADAPTIVE_HEAVY) &&
         naive_history_->is_in_history(kv_raddr)) {
-      HistEntry* histEntry = (HistEntry*)ctx->read_buf_laddr;
+      HistEntry *histEntry = (HistEntry *)ctx->read_buf_laddr;
       if (histEntry->key_hash == ctx->key_hash) {
         num_hist_match_++;
         ctx->hist_match = true;
@@ -608,9 +603,9 @@ void DMCClient::read_and_find_kv(KVOpsCtx* ctx) {
     }
 
     // compare key
-    ObjHeader* header = (ObjHeader*)ctx->read_buf_laddr;
+    ObjHeader *header = (ObjHeader *)ctx->read_buf_laddr;
     uint32_t key_len = header->key_size;
-    void* key = (void*)(ctx->read_buf_laddr + sizeof(ObjHeader));
+    void *key = (void *)(ctx->read_buf_laddr + sizeof(ObjHeader));
     if (is_key_match(key, key_len, ctx->key, ctx->key_size)) {
       ctx->key_found = true;
       ctx->target_slot_laddr = idx * sizeof(Slot) + ctx->bucket_laddr;
@@ -624,15 +619,15 @@ void DMCClient::read_and_find_kv(KVOpsCtx* ctx) {
 }
 
 // set my slot to 0 and free the rblock if my key is not the first key matched
-void DMCClient::kv_set_delete_duplicate(KVOpsCtx* ctx) {
+void DMCClient::kv_set_delete_duplicate(KVOpsCtx *ctx) {
   printd(L_DEBUG, "kv_set_delete_duplicate");
 
-  if (*(uint64_t*)ctx->target_slot_laddr != *(uint64_t*)&ctx->new_slot) {
+  if (*(uint64_t *)ctx->target_slot_laddr != *(uint64_t *)&ctx->new_slot) {
     // my own key is evicted before
     return;
   }
 
-  Slot* slot = (Slot*)ctx->bucket_laddr;
+  Slot *slot = (Slot *)ctx->bucket_laddr;
   uint64_t key_match_slot_laddr = 0;
   for (int i = 0; i < ctx->num_fp_match; i++) {
     num_rdma_read_++;
@@ -645,9 +640,9 @@ void DMCClient::kv_set_delete_duplicate(KVOpsCtx* ctx) {
                             block_size_);
     num_rdma_read_++;
     // compare key
-    ObjHeader* header = (ObjHeader*)(ctx->read_buf_laddr);
+    ObjHeader *header = (ObjHeader *)(ctx->read_buf_laddr);
     uint32_t key_len = header->key_size;
-    void* key = (void*)(ctx->read_buf_laddr + sizeof(ObjHeader));
+    void *key = (void *)(ctx->read_buf_laddr + sizeof(ObjHeader));
     if (is_key_match(key, key_len, ctx->key, ctx->key_size)) {
       key_match_slot_laddr = idx * sizeof(Slot) + ctx->bucket_laddr;
       break;
@@ -661,17 +656,17 @@ void DMCClient::kv_set_delete_duplicate(KVOpsCtx* ctx) {
   }
 
   // CAS my slot to 0 and free the remote block
-  Slot* l_slot = (Slot*)ctx->target_slot_laddr;
+  Slot *l_slot = (Slot *)ctx->target_slot_laddr;
   uint64_t slot_raddr;
   uint16_t slot_rsid;
   get_slot_raddr(ctx, ctx->target_slot_laddr, &slot_raddr, &slot_rsid);
   uint64_t slotMeta_raddr = slot_raddr + SLOT_META_OFF;
   num_rdma_cas_++;
   nm_->rdma_cas_sid_sync(0, slot_raddr, server_rkey_map_[slot_rsid],
-                         ctx->op_laddr, local_buf_mr_->lkey, *(uint64_t*)l_slot,
-                         0);
+                         ctx->op_laddr, local_buf_mr_->lkey,
+                         *(uint64_t *)l_slot, 0);
   // reclaim the block if success
-  if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)l_slot) {
+  if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)l_slot) {
     mm_->free(HashIndexConvert48To64Bits(l_slot->atomic.pointer),
               server_rkey_map_[0], block_size_, 0);
 
@@ -683,7 +678,7 @@ void DMCClient::kv_set_delete_duplicate(KVOpsCtx* ctx) {
   }
 }
 
-int DMCClient::evict_bucket(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket(KVOpsCtx *ctx) {
   num_bucket_evict_++;
   int ret = 0;
   switch (eviction_type_) {
@@ -714,7 +709,7 @@ int DMCClient::evict_bucket(KVOpsCtx* ctx) {
   return ret;
 }
 
-int DMCClient::evict_bucket_sample_adaptive_heavy(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket_sample_adaptive_heavy(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict Bucket Sample");
   int ret = 0;
 
@@ -725,13 +720,11 @@ int DMCClient::evict_bucket_sample_adaptive_heavy(KVOpsCtx* ctx) {
 
   std::vector<std::pair<double, int>> prio_slot_id[num_experts_];
   std::vector<std::pair<double, int>> prio_hist_id;
-  Slot* l_slot = (Slot*)ctx->bucket_laddr;
+  Slot *l_slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
-    if (*(uint64_t*)&l_slot[i] == ADAPTIVE_TMP_SLOT)
-      continue;
+    if (*(uint64_t *)&l_slot[i] == ADAPTIVE_TMP_SLOT) continue;
     uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
-    if (kv_raddr == 0)
-      return 0;
+    if (kv_raddr == 0) return 0;
     if (naive_history_->is_in_history(kv_raddr)) {
       double prio = l_slot[i].meta.acc_info.freq;
       prio_hist_id.emplace_back(prio, i);
@@ -744,8 +737,8 @@ int DMCClient::evict_bucket_sample_adaptive_heavy(KVOpsCtx* ctx) {
     }
   }
 
-  // evict history slot first if there are more than half of history slots in a
-  // bucket
+  // evict history slot first if there are more than half of history slots in
+  // a bucket
   std::sort(prio_hist_id.begin(), prio_hist_id.end());
   auto hist_it = prio_hist_id.begin();
   for (; prio_hist_id.size() > HASH_BUCKET_ASSOC_NUM / 8 &&
@@ -771,18 +764,18 @@ int DMCClient::evict_bucket_sample_adaptive_heavy(KVOpsCtx* ctx) {
     num_rdma_cas_++;
     int idx = slot_it->second;
     uint64_t target_slot_raddr = ctx->init_bucket_raddr + sizeof(Slot) * idx;
-    Slot* target_slot = &l_slot[idx];
+    Slot *target_slot = &l_slot[idx];
     ret = nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr,
-                                 lkey, *(uint64_t*)target_slot, 0);
+                                 lkey, *(uint64_t *)target_slot, 0);
 
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       uint64_t free_addr =
           HashIndexConvert48To64Bits(target_slot->atomic.pointer);
       mm_->free(free_addr, rkey, block_size_, 0);
       memset(target_slot, 0, sizeof(Slot));
 
       // clear slotMeta
-      SlotMeta* new_meta = (SlotMeta*)(ctx->op_laddr + 8);
+      SlotMeta *new_meta = (SlotMeta *)(ctx->op_laddr + 8);
       memset(new_meta, 0, sizeof(SlotMeta));
       nm_->rdma_inl_write_sid_async(0, target_slot_raddr + SLOT_META_OFF, rkey,
                                     (uint64_t)new_meta, lkey, sizeof(SlotMeta));
@@ -798,7 +791,7 @@ int DMCClient::evict_bucket_sample_adaptive_heavy(KVOpsCtx* ctx) {
   return -1;
 }
 
-int DMCClient::evict_bucket_sample_adaptive_naive(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket_sample_adaptive_naive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "evict bucket sample adaptive naive");
   int ret = 0;
 
@@ -809,23 +802,21 @@ int DMCClient::evict_bucket_sample_adaptive_naive(KVOpsCtx* ctx) {
 
   std::vector<std::pair<double, int>> prio_slot_id[num_experts_];
   std::vector<std::pair<double, int>> prio_hist_id;
-  Slot* l_slot = (Slot*)ctx->bucket_laddr;
+  Slot *l_slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
-    if (*(uint64_t*)&l_slot[i] == ADAPTIVE_TMP_SLOT)
-      continue;
+    if (*(uint64_t *)&l_slot[i] == ADAPTIVE_TMP_SLOT) continue;
 
     uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
     nm_->rdma_read_sid_sync(0, kv_raddr, rkey, ctx->op_laddr, lkey,
                             block_size_);
-    if (kv_raddr == 0)
-      return 0;
+    if (kv_raddr == 0) return 0;
     if (naive_history_->is_in_history(kv_raddr)) {
-      HistEntry* entry = (HistEntry*)ctx->op_laddr;
+      HistEntry *entry = (HistEntry *)ctx->op_laddr;
       double prio = entry->head;
       prio_hist_id.emplace_back(prio, i);
     } else {
-      ObjHeader* header = (ObjHeader*)ctx->op_laddr;
-      SlotMeta* meta = &header->meta;
+      ObjHeader *header = (ObjHeader *)ctx->op_laddr;
+      SlotMeta *meta = &header->meta;
       for (int j = 0; j < num_experts_; j++) {
         double prio =
             experts_[j]->parse_priority(meta, l_slot[i].atomic.kv_len);
@@ -860,11 +851,11 @@ int DMCClient::evict_bucket_sample_adaptive_naive(KVOpsCtx* ctx) {
     num_rdma_cas_++;
     int idx = slot_it->second;
     uint64_t target_slot_raddr = ctx->init_bucket_raddr + sizeof(Slot) * idx;
-    Slot* target_slot = &l_slot[idx];
+    Slot *target_slot = &l_slot[idx];
     ret = nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr,
-                                 lkey, *(uint64_t*)target_slot, 0);
+                                 lkey, *(uint64_t *)target_slot, 0);
 
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       uint64_t free_addr =
           HashIndexConvert48To64Bits(target_slot->atomic.pointer);
       mm_->free(free_addr, rkey, block_size_, 0);
@@ -880,7 +871,7 @@ int DMCClient::evict_bucket_sample_adaptive_naive(KVOpsCtx* ctx) {
   return -1;
 }
 
-int DMCClient::evict_bucket_sample_naive(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket_sample_naive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict Bucket sample naive");
   int ret = 0;
 
@@ -895,15 +886,14 @@ int DMCClient::evict_bucket_sample_naive(KVOpsCtx* ctx) {
   uint64_t sampled_key_slot_raddr[HASH_BUCKET_ASSOC_NUM];
   uint64_t sampled_key_slot_rsid[HASH_BUCKET_ASSOC_NUM];
   std::vector<std::pair<double, int>> prio_slot_id;
-  Slot* l_slot = (Slot*)ctx->bucket_laddr;
+  Slot *l_slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
     uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
-    if (kv_raddr == 0)
-      return 1;
+    if (kv_raddr == 0) return 1;
     nm_->rdma_read_sid_sync(0, kv_raddr, rkey, ctx->op_laddr, lkey,
                             block_size_);
     num_rdma_read_++;
-    ObjHeader* header = (ObjHeader*)ctx->op_laddr;
+    ObjHeader *header = (ObjHeader *)ctx->op_laddr;
     double prio =
         priority_->parse_priority(&header->meta, l_slot[i].atomic.kv_len);
     prio_slot_id.emplace_back(prio, i);
@@ -922,10 +912,11 @@ int DMCClient::evict_bucket_sample_naive(KVOpsCtx* ctx) {
     int idx = it->second;
     uint64_t target_slot_raddr = ctx->init_bucket_raddr + idx * sizeof(Slot);
     uint64_t target_slot_rsid = ctx->init_bucket_sid;
-    Slot* target_slot = &l_slot[idx];
+    Slot *target_slot = &l_slot[idx];
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, *(uint64_t*)&ctx->new_slot);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot,
+                           *(uint64_t *)&ctx->new_slot);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       ctx->target_slot_laddr = (uint64_t)target_slot;
       ctx->target_slot_raddr = target_slot_raddr;
       ctx->target_slot_sid = 0;
@@ -936,12 +927,11 @@ int DMCClient::evict_bucket_sample_naive(KVOpsCtx* ctx) {
       break;
     }
   }
-  if (it == prio_slot_id.end())
-    return -1;
+  if (it == prio_slot_id.end()) return -1;
   return 0;
 }
 
-int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict Bucket Sample");
 
   uint64_t bucket_raddr = ctx->init_bucket_raddr;
@@ -952,12 +942,11 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
       (ctx->init_bucket_raddr - server_base_addr_) / sizeof(Bucket);
   evict_bucket_cnt_[bucket_id]++;
 
-  if (!use_async_weight_)
-    adaptive_read_weights();
+  if (!use_async_weight_) adaptive_read_weights();
 
   std::vector<std::pair<double, int>> prio_slot_id[num_experts_];
   std::vector<std::pair<double, int>> prio_hist_id;
-  Slot* l_slot = (Slot*)ctx->bucket_laddr;
+  Slot *l_slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
     uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
     if (l_slot[i].atomic.kv_len == 0) {
@@ -965,8 +954,7 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
       return 1;
     }
     if (lw_history_->is_in_history(&l_slot[i])) {
-      if (lw_history_->has_overwritten(ctx->read_hist_head, kv_raddr))
-        return 1;
+      if (lw_history_->has_overwritten(ctx->read_hist_head, kv_raddr)) return 1;
       double prio = kv_raddr;
       prio_hist_id.emplace_back(prio, i);
     } else {
@@ -984,8 +972,8 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
   HashIndexConvert64To48Bits(ctx->kv_remote_block.addr,
                              ctx->new_slot.atomic.pointer);
 
-  // evict history slot first if there are more than half of history slots in a
-  // bucket
+  // evict history slot first if there are more than half of history slots in
+  // a bucket
   std::sort(prio_hist_id.begin(), prio_hist_id.end());
   auto hist_it = prio_hist_id.begin();
   for (; prio_hist_id.size() >= HASH_BUCKET_ASSOC_NUM / 2 &&
@@ -994,11 +982,12 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
     int idx = hist_it->second;
     uint64_t target_slot_raddr = ctx->init_bucket_raddr + idx * sizeof(Slot);
     uint64_t target_slotMeta_raddr = target_slot_raddr + SLOT_META_OFF;
-    Slot* target_slot = &l_slot[idx];
+    Slot *target_slot = &l_slot[idx];
     num_rdma_cas_++;
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, *(uint64_t*)&ctx->new_slot);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot,
+                           *(uint64_t *)&ctx->new_slot);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       ctx->target_slot_laddr = (uint64_t)target_slot;
       ctx->target_slot_raddr = target_slot_raddr;
       ctx->target_slot_sid = 0;
@@ -1006,7 +995,7 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
       num_bucket_evict_history_++;
       memset(target_slot, 0, sizeof(Slot));
       // clear slotMeta
-      SlotMeta* new_meta = (SlotMeta*)ctx->op_laddr;
+      SlotMeta *new_meta = (SlotMeta *)ctx->op_laddr;
       memset(new_meta, 0, sizeof(SlotMeta));
       nm_->rdma_inl_write_sid_async(0, target_slotMeta_raddr, rkey,
                                     (uint64_t)new_meta, 0, sizeof(SlotMeta));
@@ -1026,12 +1015,13 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
     int idx = slot_it->second;
     uint64_t target_slot_raddr = ctx->init_bucket_raddr + sizeof(Slot) * idx;
     uint64_t target_slotMeta_raddr = target_slot_raddr + SLOT_META_OFF;
-    Slot* target_slot = &l_slot[idx];
+    Slot *target_slot = &l_slot[idx];
     assert(lw_history_->is_in_history(target_slot) == false);
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, *(uint64_t*)&ctx->new_slot);
+                           *(uint64_t *)target_slot,
+                           *(uint64_t *)&ctx->new_slot);
 
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       ctx->target_slot_laddr = (uint64_t)target_slot;
       ctx->target_slot_raddr = target_slot_raddr;
       ctx->target_slot_sid = 0;
@@ -1042,7 +1032,7 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
       memset(target_slot, 0, sizeof(Slot));
 
       // clear slotMeta
-      SlotMeta* new_meta = (SlotMeta*)(ctx->op_laddr + 8);
+      SlotMeta *new_meta = (SlotMeta *)(ctx->op_laddr + 8);
       memset(new_meta, 0, sizeof(SlotMeta));
       nm_->rdma_inl_write_sid_async(0, target_slotMeta_raddr, rkey,
                                     (uint64_t)new_meta, 0, sizeof(SlotMeta));
@@ -1061,11 +1051,11 @@ int DMCClient::evict_bucket_sample_adaptive(KVOpsCtx* ctx) {
                                 len_list, 2);
   num_rdma_read_ += 2;
   ctx->has_read_hist_head = true;
-  ctx->read_hist_head = *(uint64_t*)ctx->op_laddr;
+  ctx->read_hist_head = *(uint64_t *)ctx->op_laddr;
   return -1;
 }
 
-int DMCClient::evict_bucket_sample(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket_sample(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict Bucket Sample");
   int ret = 0;
 
@@ -1076,10 +1066,9 @@ int DMCClient::evict_bucket_sample(KVOpsCtx* ctx) {
   uint32_t lkey = local_buf_mr_->lkey;
 
   std::vector<std::pair<double, int>> prio_slot_id;
-  Slot* l_slot = (Slot*)ctx->bucket_laddr;
+  Slot *l_slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
-    if (HashIndexConvert48To64Bits(l_slot[i].atomic.pointer) == 0)
-      return 1;
+    if (HashIndexConvert48To64Bits(l_slot[i].atomic.pointer) == 0) return 1;
     double prio =
         priority_->parse_priority(&l_slot[i].meta, l_slot[i].atomic.kv_len);
     prio_slot_id.emplace_back(prio, i);
@@ -1099,10 +1088,11 @@ int DMCClient::evict_bucket_sample(KVOpsCtx* ctx) {
     uint64_t target_slot_raddr = ctx->init_bucket_raddr + sizeof(Slot) * idx;
     uint64_t target_slotMeta_raddr = target_slot_raddr + SLOT_META_OFF;
     uint16_t target_slot_rsid = ctx->init_bucket_sid;
-    Slot* target_slot = &l_slot[idx];
+    Slot *target_slot = &l_slot[idx];
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, *(uint64_t*)&ctx->new_slot);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot,
+                           *(uint64_t *)&ctx->new_slot);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       ctx->target_slot_laddr = (uint64_t)target_slot;
       ctx->target_slot_raddr = target_slot_raddr;
       ctx->target_slot_sid = 0;
@@ -1113,7 +1103,7 @@ int DMCClient::evict_bucket_sample(KVOpsCtx* ctx) {
       memset(target_slot, 0, sizeof(Slot));
 
       // clear corresponding metadata
-      SlotMeta* new_meta = (SlotMeta*)(ctx->op_laddr + 8);
+      SlotMeta *new_meta = (SlotMeta *)(ctx->op_laddr + 8);
       memset(new_meta, 0, sizeof(SlotMeta));
       nm_->rdma_inl_write_sid_async(0, target_slotMeta_raddr, rkey,
                                     (uint64_t)new_meta, lkey, sizeof(SlotMeta));
@@ -1129,7 +1119,7 @@ int DMCClient::evict_bucket_sample(KVOpsCtx* ctx) {
   return -1;
 }
 
-int DMCClient::evict_bucket_precise(KVOpsCtx* ctx) {
+int DMCClient::evict_bucket_precise(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict bucket precise");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -1140,8 +1130,7 @@ int DMCClient::evict_bucket_precise(KVOpsCtx* ctx) {
                           lkey, sizeof(Bucket));
   num_rdma_read_++;
   match_fp_and_find_empty(ctx);
-  if (ctx->num_free_slot > 0)
-    return 1;
+  if (ctx->num_free_slot > 0) return 1;
 
   // construct new slot
   ctx->new_slot.atomic.fp = ctx->fp;
@@ -1155,14 +1144,14 @@ int DMCClient::evict_bucket_precise(KVOpsCtx* ctx) {
   if (victim_idx < 0)
     return -1;  // the bucket is not consistent with the list retry
   uint64_t victim_raddr = ctx->init_bucket_raddr + sizeof(Slot) * victim_idx;
-  Slot* victim_slot = (Slot*)(ctx->bucket_laddr + sizeof(Slot) * victim_idx);
+  Slot *victim_slot = (Slot *)(ctx->bucket_laddr + sizeof(Slot) * victim_idx);
   assert(HashIndexConvert48To64Bits(victim_slot->atomic.pointer) != 0);
   nm_->rdma_cas_sid_sync(0, victim_raddr, rkey, ctx->op_laddr, lkey,
-                         *(uint64_t*)victim_slot, *(uint64_t*)&ctx->new_slot);
+                         *(uint64_t *)victim_slot, *(uint64_t *)&ctx->new_slot);
 
   // 3. check cas result
   // 3.1 return and retry on failure
-  if (*(uint64_t*)ctx->op_laddr != *(uint64_t*)victim_slot) {
+  if (*(uint64_t *)ctx->op_laddr != *(uint64_t *)victim_slot) {
     printd(L_DEBUG, "Evict Bucket Failed!");
     return -1;
   }
@@ -1191,7 +1180,7 @@ int DMCClient::evict_bucket_precise(KVOpsCtx* ctx) {
 }
 
 // randomly select 1 empty slot from previously detected empties
-void DMCClient::find_empty(KVOpsCtx* ctx) {
+void DMCClient::find_empty(KVOpsCtx *ctx) {
   printd(L_DEBUG, "find_empty");
   assert(ctx->num_free_slot > 0);
   printd(L_DEBUG, "%d free slots", ctx->num_free_slot);
@@ -1208,13 +1197,13 @@ void DMCClient::find_empty(KVOpsCtx* ctx) {
 }
 
 // update hash table index and free old rblock
-void DMCClient::kv_set_update_index(KVOpsCtx* ctx) {
+void DMCClient::kv_set_update_index(KVOpsCtx *ctx) {
   printd(L_DEBUG, "kv_set_update_index");
-  Slot* slot = (Slot*)(ctx->target_slot_laddr);
+  Slot *slot = (Slot *)(ctx->target_slot_laddr);
   if (ctx->key_found) {
     assert(slot->atomic.fp == ctx->fp);
   } else if (eviction_type_ != EVICT_SAMPLE_ADAPTIVE) {
-    assert(*(uint64_t*)ctx->target_slot_laddr == 0);
+    assert(*(uint64_t *)ctx->target_slot_laddr == 0);
   }
 
   // construct new_slot
@@ -1226,14 +1215,14 @@ void DMCClient::kv_set_update_index(KVOpsCtx* ctx) {
   // construct cas pointer request
   num_rdma_cas_++;
   nm_->rdma_cas_sid_sync(0, ctx->target_slot_raddr, server_rkey_map_[0],
-                         ctx->op_laddr, local_buf_mr_->lkey, *(uint64_t*)slot,
-                         *(uint64_t*)&ctx->new_slot);
+                         ctx->op_laddr, local_buf_mr_->lkey, *(uint64_t *)slot,
+                         *(uint64_t *)&ctx->new_slot);
 
-  if (*(uint64_t*)ctx->op_laddr != *(uint64_t*)slot) {
+  if (*(uint64_t *)ctx->op_laddr != *(uint64_t *)slot) {
     if (ctx->key_found == false) {
       // retry if insert failure
       ctx->ret = DMC_SET_RETRY;
-    } else if (*(uint64_t*)ctx->op_laddr == 0) {
+    } else if (*(uint64_t *)ctx->op_laddr == 0) {
       // return if the key is evicted
       mm_->free(&ctx->kv_remote_block);
       ctx->ret = DMC_SET_RETURN;
@@ -1250,11 +1239,11 @@ void DMCClient::kv_set_update_index(KVOpsCtx* ctx) {
     mm_->free(free_addr, server_rkey_map_[0], block_size_, 0);
     assert(free_addr != 0);
   }
-  memcpy((void*)ctx->target_slot_laddr, &ctx->new_slot, sizeof(Slot));
+  memcpy((void *)ctx->target_slot_laddr, &ctx->new_slot, sizeof(Slot));
 }
 
-void DMCClient::gen_info_update_mask(const SlotMeta* meta,
-                                     __OUT uint32_t* info_update_mask) {
+void DMCClient::gen_info_update_mask(const SlotMeta *meta,
+                                     __OUT uint32_t *info_update_mask) {
   *info_update_mask = 0;
   if (is_evict_adaptive(eviction_type_)) {
     for (int i = 0; i < num_experts_; i++)
@@ -1266,9 +1255,8 @@ void DMCClient::gen_info_update_mask(const SlotMeta* meta,
     *info_update_mask |= UPD_CNTR;
 }
 
-void DMCClient::gen_info_meta(KVOpsCtx* ctx,
-                              uint32_t info_update_mask,
-                              __OUT SlotMeta* meta) {
+void DMCClient::gen_info_meta(KVOpsCtx *ctx, uint32_t info_update_mask,
+                              __OUT SlotMeta *meta) {
   // memset(meta, 0, sizeof(SlotMeta));
   meta->acc_info.key_hash = ctx->key_hash;
   meta->acc_info.ins_ts = new_ts();
@@ -1279,7 +1267,7 @@ void DMCClient::gen_info_meta(KVOpsCtx* ctx,
     meta->acc_info.freq++;
   }
   if (info_update_mask & UPD_CNTR) {
-    Priority* cur_prio;
+    Priority *cur_prio;
     if (is_evict_adaptive(eviction_type_))
       cur_prio = experts_[0];
     else
@@ -1288,7 +1276,7 @@ void DMCClient::gen_info_meta(KVOpsCtx* ctx,
   }
 }
 
-void DMCClient::update_priority_sample_naive(KVOpsCtx* ctx) {
+void DMCClient::update_priority_sample_naive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "update_priority_naive");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -1299,13 +1287,13 @@ void DMCClient::update_priority_sample_naive(KVOpsCtx* ctx) {
   else
     block_raddr = ctx->kv_remote_block.addr;
 
-  ObjHeader* old_header = (ObjHeader*)ctx->op_laddr;
+  ObjHeader *old_header = (ObjHeader *)ctx->op_laddr;
   memset(old_header, 0, sizeof(ObjHeader));
   if (ctx->op == SET && ctx->key_found == true) {
-    memcpy(old_header, (void*)ctx->read_buf_laddr, sizeof(ObjHeader));
+    memcpy(old_header, (void *)ctx->read_buf_laddr, sizeof(ObjHeader));
   }
 
-  SlotMeta* old_meta = &old_header->meta;
+  SlotMeta *old_meta = &old_header->meta;
   uint32_t info_update_mask = 0;
   gen_info_update_mask(old_meta, &info_update_mask);
   gen_info_meta(ctx, info_update_mask, old_meta);
@@ -1316,7 +1304,7 @@ void DMCClient::update_priority_sample_naive(KVOpsCtx* ctx) {
   struct ibv_sge write_ts_sge;
   struct ibv_send_wr faa_wr;
   struct ibv_sge faa_sge;
-  struct ibv_send_wr* head_wr = NULL;
+  struct ibv_send_wr *head_wr = NULL;
 
   if (info_update_mask & UPD_CNTR) {
     memset(&write_cntr_wr, 0, sizeof(struct ibv_send_wr));
@@ -1371,18 +1359,17 @@ void DMCClient::update_priority_sample_naive(KVOpsCtx* ctx) {
   nm_->rdma_post_send_sid_async(head_wr, 0);
 }
 
-void DMCClient::update_priority_sample_adaptive(KVOpsCtx* ctx) {
+void DMCClient::update_priority_sample_adaptive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "update_priority");
   uint32_t info_update_mask = 0;
-  SlotMeta* old_meta = &((Slot*)ctx->target_slot_laddr)->meta;
-  if (ctx->key_found != true)
-    memset(old_meta, 0, sizeof(SlotMeta));
+  SlotMeta *old_meta = &((Slot *)ctx->target_slot_laddr)->meta;
+  if (ctx->key_found != true) memset(old_meta, 0, sizeof(SlotMeta));
   for (int i = 0; i < num_experts_; i++)
     info_update_mask |= experts_[i]->info_update_mask(old_meta);
   update_priority_common(ctx, info_update_mask);
 }
 
-void DMCClient::update_priority_common(KVOpsCtx* ctx, uint32_t info_upd_mask) {
+void DMCClient::update_priority_common(KVOpsCtx *ctx, uint32_t info_upd_mask) {
   printd(L_DEBUG, "update_priority_common");
   std::vector<std::pair<uint64_t, uint64_t>> freq_upd_vec;
   std::string str_key = get_str_key(ctx);
@@ -1395,7 +1382,7 @@ void DMCClient::update_priority_common(KVOpsCtx* ctx, uint32_t info_upd_mask) {
     else
       freq_upd_vec.emplace_back(freq_raddr, 1);
   }
-  struct ibv_send_wr* head_wr = NULL;
+  struct ibv_send_wr *head_wr = NULL;
   struct ibv_send_wr faa_wr[MAX_NUM_FAA];
   struct ibv_sge faa_sge[MAX_NUM_FAA];
   memset(faa_wr, 0, sizeof(struct ibv_send_wr) * MAX_NUM_FAA);
@@ -1419,7 +1406,7 @@ void DMCClient::update_priority_common(KVOpsCtx* ctx, uint32_t info_upd_mask) {
   struct ibv_sge write_sge;
   if (info_upd_mask & UPD_TS || info_upd_mask & UPD_CNTR ||
       (ctx->op == SET && ctx->key_found == false)) {
-    SlotMeta* new_meta = (SlotMeta*)ctx->op_laddr;
+    SlotMeta *new_meta = (SlotMeta *)ctx->op_laddr;
     gen_info_meta(ctx, info_upd_mask, new_meta);
     memset(&write_wr, 0, sizeof(struct ibv_send_wr));
     if (ctx->op == SET && ctx->key_found == false) {
@@ -1457,27 +1444,25 @@ void DMCClient::update_priority_common(KVOpsCtx* ctx, uint32_t info_upd_mask) {
   nm_->rdma_post_send_sid_async(head_wr, 0);
 }
 
-void DMCClient::update_priority_sample(KVOpsCtx* ctx) {
+void DMCClient::update_priority_sample(KVOpsCtx *ctx) {
   printd(L_DEBUG, "update_priority");
-  SlotMeta* old_meta = &((Slot*)ctx->target_slot_laddr)->meta;
-  if (ctx->key_found == false)
-    memset(old_meta, 0, sizeof(SlotMeta));
+  SlotMeta *old_meta = &((Slot *)ctx->target_slot_laddr)->meta;
+  if (ctx->key_found == false) memset(old_meta, 0, sizeof(SlotMeta));
   uint32_t info_update_mask = priority_->info_update_mask(old_meta);
   update_priority_common(ctx, info_update_mask);
 }
 
-void DMCClient::update_priority_precise(KVOpsCtx* ctx) {
+void DMCClient::update_priority_precise(KVOpsCtx *ctx) {
   printd(L_DEBUG, "update_priority_precise");
 
   // 1. update slot meta
-  SlotMeta* old_meta = &((Slot*)ctx->target_slot_laddr)->meta;
-  if (ctx->key_found == false)
-    memset(old_meta, 0, sizeof(SlotMeta));
+  SlotMeta *old_meta = &((Slot *)ctx->target_slot_laddr)->meta;
+  if (ctx->key_found == false) memset(old_meta, 0, sizeof(SlotMeta));
   uint32_t info_update_mask = priority_->info_update_mask(old_meta);
   update_priority_common(ctx, info_update_mask);
 
-  Slot* target_slot = (Slot*)ctx->target_slot_laddr;
-  SlotMeta* new_meta = (SlotMeta*)(ctx->op_laddr + 16);
+  Slot *target_slot = (Slot *)ctx->target_slot_laddr;
+  SlotMeta *new_meta = (SlotMeta *)(ctx->op_laddr + 16);
   memcpy(new_meta, &target_slot->meta, sizeof(SlotMeta));
   gen_info_meta(ctx, info_update_mask, new_meta);
 
@@ -1486,10 +1471,10 @@ void DMCClient::update_priority_precise(KVOpsCtx* ctx) {
       priority_->parse_priority(new_meta, target_slot->atomic.kv_len);
   uint32_t slot_id = get_slot_id(ctx->target_slot_raddr);
   prio_list_->update(nm_, slot_id, new_priority, ctx->target_slot_raddr,
-                     *(uint64_t*)target_slot);
+                     *(uint64_t *)target_slot);
 }
 
-void DMCClient::update_priority_cliquemap(KVOpsCtx* ctx) {
+void DMCClient::update_priority_cliquemap(KVOpsCtx *ctx) {
   int ret = 0;
   uint32_t required_size = ctx->key_size + sizeof(uint8_t) + sizeof(uint64_t);
   struct timeval now;
@@ -1539,30 +1524,30 @@ void DMCClient::update_priority_cliquemap(KVOpsCtx* ctx) {
     assert(wc.status == IBV_WC_SUCCESS);
     assert(wc.opcode == IBV_WC_RECV);
     assert(wc.wr_id == 0);
-    assert(*(uint8_t*)ts_rep_buf_ == IBMSG_REP_PRIORITY);
-    assert(*(int*)((uint64_t)ts_rep_buf_ + sizeof(uint8_t)) == 0);
+    assert(*(uint8_t *)ts_rep_buf_ == IBMSG_REP_PRIORITY);
+    assert(*(int *)((uint64_t)ts_rep_buf_ + sizeof(uint8_t)) == 0);
 
     // reset ts message buffer
     memset(ts_buf_, 0, MSG_BUF_SIZE);
-    *(uint8_t*)ts_buf_ = IBMSG_REQ_PRIORITY;
-    *(uint16_t*)((uint64_t)ts_buf_ + sizeof(uint8_t)) = my_sid_;
-    *(uint32_t*)((uint64_t)ts_buf_ + sizeof(uint8_t) + sizeof(uint16_t)) = 0;
+    *(uint8_t *)ts_buf_ = IBMSG_REQ_PRIORITY;
+    *(uint16_t *)((uint64_t)ts_buf_ + sizeof(uint8_t)) = my_sid_;
+    *(uint32_t *)((uint64_t)ts_buf_ + sizeof(uint8_t) + sizeof(uint16_t)) = 0;
     ts_buf_off_ = sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint32_t);
     gettimeofday(&last_sync_time_, NULL);
     num_cliquemap_sync_++;
   }
   assert(ctx->key_size < 256);
-  *(uint32_t*)((uint64_t)ts_buf_ + sizeof(uint8_t) + sizeof(uint16_t)) += 1;
-  *(uint64_t*)((uint64_t)ts_buf_ + ts_buf_off_) = new_ts();
-  *(uint8_t*)((uint64_t)ts_buf_ + ts_buf_off_ + sizeof(uint64_t)) =
+  *(uint32_t *)((uint64_t)ts_buf_ + sizeof(uint8_t) + sizeof(uint16_t)) += 1;
+  *(uint64_t *)((uint64_t)ts_buf_ + ts_buf_off_) = new_ts();
+  *(uint8_t *)((uint64_t)ts_buf_ + ts_buf_off_ + sizeof(uint64_t)) =
       (uint8_t)ctx->key_size;
-  memcpy((void*)((uint64_t)ts_buf_ + ts_buf_off_ + sizeof(uint64_t) +
-                 sizeof(uint8_t)),
+  memcpy((void *)((uint64_t)ts_buf_ + ts_buf_off_ + sizeof(uint64_t) +
+                  sizeof(uint8_t)),
          ctx->key, ctx->key_size);
   ts_buf_off_ += required_size;
 }
 
-void DMCClient::update_priority(KVOpsCtx* ctx) {
+void DMCClient::update_priority(KVOpsCtx *ctx) {
   switch (eviction_type_) {
     case EVICT_NON:
       return;
@@ -1585,10 +1570,10 @@ void DMCClient::update_priority(KVOpsCtx* ctx) {
 }
 
 // use RDMA to: read bucket and read history counter (accordingly)
-void DMCClient::kv_get_read_index(KVOpsCtx* ctx) {
+void DMCClient::kv_get_read_index(KVOpsCtx *ctx) {
   printd(L_DEBUG, "kv_get");
   // construct rdma read bucket request
-  struct ibv_send_wr* head_wr = NULL;
+  struct ibv_send_wr *head_wr = NULL;
   struct ibv_send_wr read_bucket_wr;
   struct ibv_sge read_bucket_sge;
   memset(&read_bucket_wr, 0, sizeof(struct ibv_send_wr));
@@ -1628,24 +1613,21 @@ void DMCClient::kv_get_read_index(KVOpsCtx* ctx) {
 
   if (is_evict_adaptive(eviction_type_)) {
     ctx->has_read_hist_head = true;
-    ctx->read_hist_head = *(uint64_t*)ctx->op_laddr;
+    ctx->read_hist_head = *(uint64_t *)ctx->op_laddr;
   }
 }
 
-void DMCClient::kv_get_copy_value(KVOpsCtx* ctx,
-                                  __OUT void* val,
-                                  __OUT uint32_t* val_len) {
-  ObjHeader* header = (ObjHeader*)ctx->target_block_laddr;
+void DMCClient::kv_get_copy_value(KVOpsCtx *ctx, __OUT void *val,
+                                  __OUT uint32_t *val_len) {
+  ObjHeader *header = (ObjHeader *)ctx->target_block_laddr;
   uint32_t rval_len = header->val_size;
   uint32_t rkey_len = header->key_size;
-  memcpy(val, (void*)(ctx->target_block_laddr + rkey_len + sizeof(ObjHeader)),
+  memcpy(val, (void *)(ctx->target_block_laddr + rkey_len + sizeof(ObjHeader)),
          rval_len);
   *val_len = rval_len;
 }
 
-int DMCClient::kv_set_1s(void* key,
-                         uint32_t key_size,
-                         void* val,
+int DMCClient::kv_set_1s(void *key, uint32_t key_size, void *val,
                          uint32_t val_size) {
   KVOpsCtx ctx;
   int ret = 0;
@@ -1710,10 +1692,8 @@ kv_set_1s_retry:
   return set_miss ? -1 : 0;
 }
 
-int DMCClient::kv_get_1s(void* key,
-                         uint32_t key_size,
-                         __OUT void* val,
-                         __OUT uint32_t* val_size) {
+int DMCClient::kv_get_1s(void *key, uint32_t key_size, __OUT void *val,
+                         __OUT uint32_t *val_size) {
   char key_buf[256] = {0};
   memcpy(key_buf, key, key_size);
   printd(L_DEBUG, "get %s", key_buf);
@@ -1744,7 +1724,7 @@ int DMCClient::kv_get_1s(void* key,
   return 0;
 }
 
-int DMCClient::evict(KVOpsCtx* ctx) {
+int DMCClient::evict(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict");
   num_evict_++;
   int ret = 0;
@@ -1777,8 +1757,9 @@ int DMCClient::evict(KVOpsCtx* ctx) {
 }
 
 // use experts to select victim from random sampled ones
-// will make slotAtomic to ADAPTIVE_TMP_SLOT, clear slotMeta, free rblock and insert history entry to FIFO list
-int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
+// will make slotAtomic to ADAPTIVE_TMP_SLOT, clear slotMeta, free rblock and
+// insert history entry to FIFO list
+int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -1798,15 +1779,13 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
     nm_->rdma_read_sid_sync(0, bucket_raddr, rkey, ctx->op_laddr, lkey,
                             sizeof(Bucket) * 4);
 
-    Slot* l_slot = (Slot*)ctx->op_laddr;
+    Slot *l_slot = (Slot *)ctx->op_laddr;
     for (int i = 0;
          i < HASH_BUCKET_ASSOC_NUM * 4 && num_sampled_keys < MAX_NUM_SAMPLES;
          i++) {
-      if (*(uint64_t*)&l_slot[i] == ADAPTIVE_TMP_SLOT)
-        continue;
+      if (*(uint64_t *)&l_slot[i] == ADAPTIVE_TMP_SLOT) continue;
       uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
-      if (kv_raddr == 0 || naive_history_->is_in_history(kv_raddr))
-        continue;
+      if (kv_raddr == 0 || naive_history_->is_in_history(kv_raddr)) continue;
       memcpy(&sampled_key_slot[num_sampled_keys], &l_slot[i], sizeof(Slot));
       sampled_key_slot_raddr[num_sampled_keys] =
           bucket_raddr + i * sizeof(Slot);
@@ -1832,19 +1811,19 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
   int best_candidate =
       adaptive_get_best_candidate(best_candidate_list, &expert_bmap);
   uint64_t best_slot_raddr = sampled_key_slot_raddr[best_candidate];
-  Slot* best_lslot = &sampled_key_slot[best_candidate];
+  Slot *best_lslot = &sampled_key_slot[best_candidate];
 
   num_rdma_cas_++;
   nm_->rdma_cas_sid_sync(0, best_slot_raddr, rkey, ctx->op_laddr, lkey,
-                         *(uint64_t*)best_lslot, ADAPTIVE_TMP_SLOT);
-  if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)best_lslot) {
+                         *(uint64_t *)best_lslot, ADAPTIVE_TMP_SLOT);
+  if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)best_lslot) {
     printd(L_DEBUG, "evict best success");
     uint64_t free_addr = HashIndexConvert48To64Bits(
         sampled_key_slot[best_candidate].atomic.pointer);
     mm_->free(free_addr, rkey, block_size_, 0);
 
     // clear slotMeta
-    SlotMeta* new_slotMeta = (SlotMeta*)(ctx->op_laddr + sizeof(uint64_t));
+    SlotMeta *new_slotMeta = (SlotMeta *)(ctx->op_laddr + sizeof(uint64_t));
     memset(new_slotMeta, 0, sizeof(SlotMeta));
     ret = nm_->rdma_inl_write_sid_async(0, best_slot_raddr + SLOT_META_OFF,
                                         rkey, (uint64_t)new_slotMeta, lkey,
@@ -1858,9 +1837,9 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
     ret = nm_->rdma_read_sid_sync(0, free_addr, rkey, kv_laddr, lkey,
                                   block_size_);
     num_rdma_read_++;
-    ObjHeader* header = (ObjHeader*)kv_laddr;
+    ObjHeader *header = (ObjHeader *)kv_laddr;
     uint64_t key_laddr = kv_laddr + sizeof(ObjHeader);
-    uint64_t key_hash = hash_->hash_func1((void*)key_laddr, header->key_size);
+    uint64_t key_hash = hash_->hash_func1((void *)key_laddr, header->key_size);
     naive_history_->insert(nm_, best_slot_raddr, key_hash, expert_bmap,
                            &best_lslot->meta);
     num_rdma_faa_++;
@@ -1876,21 +1855,20 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
   for (; it != prio_slot_id[best_expert].end(); it++) {
     num_rdma_cas_++;
     int idx = it->second;
-    if (idx == best_candidate)
-      continue;
+    if (idx == best_candidate) continue;
     uint64_t target_slot_raddr = sampled_key_slot_raddr[idx];
-    Slot* target_slot = &sampled_key_slot[idx];
-    *(uint64_t*)ctx->op_laddr = 0;
+    Slot *target_slot = &sampled_key_slot[idx];
+    *(uint64_t *)ctx->op_laddr = 0;
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, ADAPTIVE_TMP_SLOT);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot, ADAPTIVE_TMP_SLOT);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       // Eviction success
       uint64_t free_addr =
           HashIndexConvert48To64Bits(target_slot->atomic.pointer);
       mm_->free(free_addr, server_rkey_map_[0], block_size_, 0);
 
       // clear the corresponding access information slot (async)
-      SlotMeta* new_slotMeta = (SlotMeta*)(ctx->op_laddr + sizeof(uint64_t));
+      SlotMeta *new_slotMeta = (SlotMeta *)(ctx->op_laddr + sizeof(uint64_t));
       memset(new_slotMeta, 0, sizeof(SlotMeta));
       nm_->rdma_inl_write_sid_async(0, target_slot_raddr + SLOT_META_OFF, rkey,
                                     (uint64_t)new_slotMeta, lkey,
@@ -1903,9 +1881,10 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
       ret = nm_->rdma_read_sid_sync(0, free_addr, rkey, kv_laddr, lkey,
                                     block_size_);
       num_rdma_read_++;
-      ObjHeader* header = (ObjHeader*)kv_laddr;
+      ObjHeader *header = (ObjHeader *)kv_laddr;
       uint64_t key_laddr = kv_laddr + sizeof(ObjHeader);
-      uint64_t key_hash = hash_->hash_func1((void*)key_laddr, header->key_size);
+      uint64_t key_hash =
+          hash_->hash_func1((void *)key_laddr, header->key_size);
       naive_history_->insert(nm_, target_slot_raddr, key_hash, expert_bmap,
                              &target_slot->meta);
       num_rdma_faa_++;
@@ -1919,8 +1898,9 @@ int DMCClient::evict_sample_adaptive_heavy(KVOpsCtx* ctx) {
 }
 
 // use experts to select victim from random sampled ones
-// will make slotAtomic to ADAPTIVE_TMP_SLOT, free rblock and insert history entry to FIFO list
-int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
+// will make slotAtomic to ADAPTIVE_TMP_SLOT, free rblock and insert history
+// entry to FIFO list
+int DMCClient::evict_sample_adaptive_naive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "evict adaptive naive");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -1941,21 +1921,19 @@ int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
     nm_->rdma_read_sid_sync(0, bucket_raddr, rkey, ctx->op_laddr, lkey,
                             sizeof(Bucket) * 4);
 
-    Slot* l_slot = (Slot*)ctx->op_laddr;
+    Slot *l_slot = (Slot *)ctx->op_laddr;
     for (int i = 0;
          i < 4 * HASH_BUCKET_ASSOC_NUM && num_samples_ < MAX_NUM_SAMPLES; i++) {
-      if (*(uint64_t*)&l_slot[i] == ADAPTIVE_TMP_SLOT)
-        continue;
+      if (*(uint64_t *)&l_slot[i] == ADAPTIVE_TMP_SLOT) continue;
 
       uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
-      if (kv_raddr == 0 || naive_history_->is_in_history(kv_raddr))
-        continue;
+      if (kv_raddr == 0 || naive_history_->is_in_history(kv_raddr)) continue;
 
       uint64_t kv_laddr = ctx->op_laddr + sizeof(Bucket) * 4;
       num_rdma_read_++;
       nm_->rdma_read_sid_sync(0, kv_raddr, rkey, kv_laddr, lkey, block_size_);
-      ObjHeader* header = (ObjHeader*)kv_laddr;
-      void* cur_key = (void*)(kv_laddr + sizeof(ObjHeader));
+      ObjHeader *header = (ObjHeader *)kv_laddr;
+      void *cur_key = (void *)(kv_laddr + sizeof(ObjHeader));
 
       memcpy(&sampled_key_slot[num_sampled_keys], &l_slot[i], sizeof(Slot));
       memcpy(&sampled_key_slotM[num_sampled_keys], &header->meta,
@@ -1987,12 +1965,12 @@ int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
   int best_candidate =
       adaptive_get_best_candidate(best_candidate_list, &expert_bmap);
   uint64_t best_slot_raddr = sampled_key_slot_raddr[best_candidate];
-  Slot* best_slot = &sampled_key_slot[best_candidate];
+  Slot *best_slot = &sampled_key_slot[best_candidate];
 
   num_rdma_cas_++;
   nm_->rdma_cas_sid_sync(0, best_slot_raddr, rkey, ctx->op_laddr, lkey,
-                         *(uint64_t*)best_slot, ADAPTIVE_TMP_SLOT);
-  if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)best_slot) {
+                         *(uint64_t *)best_slot, ADAPTIVE_TMP_SLOT);
+  if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)best_slot) {
     printd(L_DEBUG, "evict best success");
     uint64_t free_addr = HashIndexConvert48To64Bits(
         sampled_key_slot[best_candidate].atomic.pointer);
@@ -2016,11 +1994,11 @@ int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
     num_rdma_cas_++;
     int idx = it->second;
     uint64_t target_slot_raddr = sampled_key_slot_raddr[idx];
-    Slot* target_slot = &sampled_key_slot[idx];
-    *(uint64_t*)ctx->op_laddr = 0;
+    Slot *target_slot = &sampled_key_slot[idx];
+    *(uint64_t *)ctx->op_laddr = 0;
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, ADAPTIVE_TMP_SLOT);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot, ADAPTIVE_TMP_SLOT);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       printd(L_DEBUG, "evict resort success");
       uint64_t free_addr =
           HashIndexConvert48To64Bits(target_slot->atomic.pointer);
@@ -2041,7 +2019,7 @@ int DMCClient::evict_sample_adaptive_naive(KVOpsCtx* ctx) {
 
 // use RList to evict precisely
 // will reset slotAtomic, free rblock, clear slotMeta and maintain list entry
-int DMCClient::evict_precise(KVOpsCtx* ctx) {
+int DMCClient::evict_precise(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict precise!");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -2050,7 +2028,7 @@ int DMCClient::evict_precise(KVOpsCtx* ctx) {
   // 1. get the victim
   uint32_t victim_id = prio_list_->get_list_min(nm_);
   uint64_t victim_raddr = get_slot_raddr(victim_id);
-  Slot* victim_lslot = (Slot*)(ctx->op_laddr);
+  Slot *victim_lslot = (Slot *)(ctx->op_laddr);
   nm_->rdma_read_sid_sync(0, victim_raddr, rkey, (uint64_t)victim_lslot, lkey,
                           sizeof(Slot));
   if (HashIndexConvert48To64Bits(victim_lslot->atomic.pointer) == 0) {
@@ -2058,10 +2036,10 @@ int DMCClient::evict_precise(KVOpsCtx* ctx) {
   }
 
   // 2. cas the victim
-  Slot* swap_back = (Slot*)(ctx->op_laddr + sizeof(Slot));
+  Slot *swap_back = (Slot *)(ctx->op_laddr + sizeof(Slot));
   nm_->rdma_cas_sid_sync(0, victim_raddr, rkey, (uint64_t)swap_back, lkey,
-                         *(uint64_t*)victim_lslot, 0);
-  if (*(uint64_t*)swap_back != *(uint64_t*)victim_lslot) {
+                         *(uint64_t *)victim_lslot, 0);
+  if (*(uint64_t *)swap_back != *(uint64_t *)victim_lslot) {
     return -1;
   }
 
@@ -2086,7 +2064,7 @@ int DMCClient::evict_precise(KVOpsCtx* ctx) {
 
 // evict from randomly selected ones
 // will reset slotAtomic and free rblock **only**
-int DMCClient::evict_sample_naive(KVOpsCtx* ctx) {
+int DMCClient::evict_sample_naive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -2111,17 +2089,16 @@ int DMCClient::evict_sample_naive(KVOpsCtx* ctx) {
                                   sizeof(Bucket));
     assert(ret == 0);
 
-    Slot* l_slot = (Slot*)ctx->op_laddr;
+    Slot *l_slot = (Slot *)ctx->op_laddr;
     for (int i = 0;
          i < HASH_BUCKET_ASSOC_NUM && num_sampled_keys < MAX_NUM_SAMPLES; i++) {
       uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
-      if (kv_raddr == 0)
-        continue;
+      if (kv_raddr == 0) continue;
       ret = nm_->rdma_read_sid_sync(0, kv_raddr, rkey, kv_laddr, lkey,
                                     block_size_);
       assert(ret == 0);
 
-      ObjHeader* header = (ObjHeader*)kv_laddr;
+      ObjHeader *header = (ObjHeader *)kv_laddr;
       double prio =
           priority_->parse_priority(&header->meta, l_slot[i].atomic.kv_len);
       memcpy(&sampled_key_slot[num_sampled_keys], &l_slot[i], sizeof(Slot));
@@ -2140,12 +2117,12 @@ int DMCClient::evict_sample_naive(KVOpsCtx* ctx) {
     int idx = it->second;
     uint64_t target_slot_raddr = sampled_key_slot_raddr[idx];
     uint16_t target_slot_rsid = sampled_key_slot_rsid[idx];
-    Slot* target_slot = &sampled_key_slot[idx];
-    *(uint64_t*)ctx->op_laddr = 0;
+    Slot *target_slot = &sampled_key_slot[idx];
+    *(uint64_t *)ctx->op_laddr = 0;
     ret = nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr,
-                                 lkey, *(uint64_t*)target_slot, 0);
+                                 lkey, *(uint64_t *)target_slot, 0);
     assert(ret == 0);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       uint64_t free_addr =
           HashIndexConvert48To64Bits(target_slot->atomic.pointer);
       mm_->free(free_addr, rkey, block_size_, 0);
@@ -2160,8 +2137,9 @@ int DMCClient::evict_sample_naive(KVOpsCtx* ctx) {
 }
 
 // use experts to select victim from random sampled ones
-// will make slot to lw_history_entry(kv_len 0xFF, HistID, expert_bmap) and free rblock
-int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
+// will make slot to lw_history_entry(kv_len 0xFF, HistID, expert_bmap) and free
+// rblock
+int DMCClient::evict_sample_adaptive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -2209,21 +2187,20 @@ int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
       sr[1].wr.atomic.remote_addr = lw_history_->hist_cntr_raddr();
       sr[1].wr.atomic.rkey = rkey;
       nm_->rdma_post_send_sid_sync(sr, 0);
-      ctx->faa_hist_head = *(uint64_t*)(ctx->op_laddr + sizeof(Bucket) * 4);
+      ctx->faa_hist_head = *(uint64_t *)(ctx->op_laddr + sizeof(Bucket) * 4);
       ctx->has_faa_hist_head = true;
     } else {
       nm_->rdma_read_sid_sync(0, bucket_raddr, rkey, ctx->op_laddr, lkey,
                               sizeof(Bucket) * 4);
     }
 
-    Slot* l_slot = (Slot*)(ctx->op_laddr);
+    Slot *l_slot = (Slot *)(ctx->op_laddr);
     for (int i = 0;
          i < HASH_BUCKET_ASSOC_NUM * 4 && num_sampled_keys < MAX_NUM_SAMPLES;
          i++) {
       uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
       uint64_t slot_raddr = bucket_raddr + i * sizeof(Slot);
-      if (kv_raddr == 0 || lw_history_->is_in_history(&l_slot[i]))
-        continue;
+      if (kv_raddr == 0 || lw_history_->is_in_history(&l_slot[i])) continue;
       memcpy(&sampled_key_slot[num_sampled_keys], &l_slot[i], sizeof(Slot));
       sampled_key_slot_raddr[num_sampled_keys] = slot_raddr;
       sampled_key_slot_rsid[num_sampled_keys] = bucket_rsid;
@@ -2237,8 +2214,7 @@ int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
   }
 
   // read weights if do not use asychrounous weight update
-  if (!use_async_weight_)
-    adaptive_read_weights();
+  if (!use_async_weight_) adaptive_read_weights();
 
   // construct new slot value
   assert(ctx->has_faa_hist_head == true);
@@ -2261,12 +2237,12 @@ int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
   // evict best candidate slot
   uint64_t best_slot_raddr = sampled_key_slot_raddr[best_candidate];
   uint64_t best_slotMeta_raddr = best_slot_raddr + SLOT_META_OFF;
-  Slot* best_lslot = &sampled_key_slot[best_candidate];
+  Slot *best_lslot = &sampled_key_slot[best_candidate];
   hist_slot.atomic.fp = best_lslot->atomic.fp;
   num_rdma_cas_++;
   nm_->rdma_cas_sid_sync(0, best_slot_raddr, rkey, ctx->op_laddr, lkey,
-                         *(uint64_t*)best_lslot, *(uint64_t*)&hist_slot);
-  if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)best_lslot) {
+                         *(uint64_t *)best_lslot, *(uint64_t *)&hist_slot);
+  if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)best_lslot) {
     count_expert_evict(expert_bmap);
     printd(L_DEBUG, "evict best success");
     uint64_t free_addr = HashIndexConvert48To64Bits(best_lslot->atomic.pointer);
@@ -2287,17 +2263,16 @@ int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
   for (; it != prio_slot_id[best_expert].end(); it++) {
     num_rdma_cas_++;
     int idx = it->second;
-    if (idx == best_candidate)
-      continue;
+    if (idx == best_candidate) continue;
     uint64_t target_slot_raddr = sampled_key_slot_raddr[idx];
     uint64_t target_slotMeta_raddr = target_slot_raddr + SLOT_META_OFF;
     uint16_t target_slot_rsid = sampled_key_slot_rsid[idx];
-    Slot* target_slot = &sampled_key_slot[idx];
-    *(uint64_t*)ctx->op_laddr = 0;
+    Slot *target_slot = &sampled_key_slot[idx];
+    *(uint64_t *)ctx->op_laddr = 0;
     hist_slot.atomic.fp = target_slot->atomic.fp;
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, *(uint64_t*)&hist_slot);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot, *(uint64_t *)&hist_slot);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       count_expert_evict(expert_bmap);
       // Eviction success
       uint64_t free_addr =
@@ -2318,7 +2293,7 @@ int DMCClient::evict_sample_adaptive(KVOpsCtx* ctx) {
 
 // evict from randomly selected ones
 // will reset slotAtomic, free rblock, clear slotMeta and evict_callback
-int DMCClient::evict_sample(KVOpsCtx* ctx) {
+int DMCClient::evict_sample(KVOpsCtx *ctx) {
   printd(L_DEBUG, "Evict");
   int ret = 0;
   uint32_t rkey = server_rkey_map_[0];
@@ -2341,12 +2316,11 @@ int DMCClient::evict_sample(KVOpsCtx* ctx) {
                                   sizeof(Bucket) * 4);
     assert(ret == 0);
 
-    Slot* l_slot = (Slot*)ctx->op_laddr;
+    Slot *l_slot = (Slot *)ctx->op_laddr;
     for (int i = 0;
          i < HASH_BUCKET_ASSOC_NUM * 4 && num_sampled_keys < MAX_NUM_SAMPLES;
          i++) {
-      if (HashIndexConvert48To64Bits(l_slot[i].atomic.pointer) == 0)
-        continue;
+      if (HashIndexConvert48To64Bits(l_slot[i].atomic.pointer) == 0) continue;
       double prio =
           priority_->parse_priority(&l_slot[i].meta, l_slot[i].atomic.kv_len);
       uint64_t slot_raddr = bucket_raddr + i * sizeof(Slot);
@@ -2368,11 +2342,11 @@ int DMCClient::evict_sample(KVOpsCtx* ctx) {
     uint64_t target_slot_raddr = sampled_key_slot_raddr[idx];
     uint64_t target_slotMeta_raddr = target_slot_raddr + SLOT_META_OFF;
     uint16_t target_slot_rsid = sampled_key_slot_rsid[idx];
-    Slot* target_slot = &sampled_key_slot[idx];
-    *(uint64_t*)ctx->op_laddr = 0;
+    Slot *target_slot = &sampled_key_slot[idx];
+    *(uint64_t *)ctx->op_laddr = 0;
     nm_->rdma_cas_sid_sync(0, target_slot_raddr, rkey, ctx->op_laddr, lkey,
-                           *(uint64_t*)target_slot, 0);
-    if (*(uint64_t*)ctx->op_laddr == *(uint64_t*)target_slot) {
+                           *(uint64_t *)target_slot, 0);
+    if (*(uint64_t *)ctx->op_laddr == *(uint64_t *)target_slot) {
       priority_->evict_callback(it->first);
       printd(L_DEBUG, "evicti priority: %lf", it->first);
       // Eviction success
@@ -2382,7 +2356,7 @@ int DMCClient::evict_sample(KVOpsCtx* ctx) {
       mm_->free(free_addr, server_rkey_map_[0], block_size_, 0);
 
       // clear the corresponding access information slot (async)
-      SlotMeta* new_slotMeta = (SlotMeta*)(ctx->op_laddr + sizeof(uint64_t));
+      SlotMeta *new_slotMeta = (SlotMeta *)(ctx->op_laddr + sizeof(uint64_t));
       memset(new_slotMeta, 0, sizeof(SlotMeta));
       nm_->rdma_inl_write_sid_async(0, target_slotMeta_raddr, rkey,
                                     (uint64_t)new_slotMeta, lkey,
@@ -2403,16 +2377,14 @@ int DMCClient::evict_sample(KVOpsCtx* ctx) {
   return -1;
 }
 
-int DMCClient::kv_get_2s(void* key,
-                         uint32_t key_size,
-                         __OUT void* val,
-                         __OUT uint32_t* val_size) {
-  *(uint8_t*)local_buf_ = IBMSG_REQ_GET;
-  *(uint16_t*)((uint64_t)local_buf_ + sizeof(uint8_t)) = my_sid_;
+int DMCClient::kv_get_2s(void *key, uint32_t key_size, __OUT void *val,
+                         __OUT uint32_t *val_size) {
+  *(uint8_t *)local_buf_ = IBMSG_REQ_GET;
+  *(uint16_t *)((uint64_t)local_buf_ + sizeof(uint8_t)) = my_sid_;
   uint64_t key_addr = (uint64_t)local_buf_ + sizeof(uint8_t) + sizeof(uint16_t);
 
-  *(uint32_t*)key_addr = key_size;
-  memcpy((void*)(key_addr + sizeof(uint32_t)), key, key_size);
+  *(uint32_t *)key_addr = key_size;
+  memcpy((void *)(key_addr + sizeof(uint32_t)), key, key_size);
 
   // post rr fist
   struct ibv_recv_wr rr;
@@ -2453,26 +2425,25 @@ int DMCClient::kv_get_2s(void* key,
   assert(recv_wc.wr_id == 1);
 
   uint64_t ret_msg_addr = (uint64_t)local_buf_ + block_size_;
-  *val_size = *(uint32_t*)ret_msg_addr;
+  *val_size = *(uint32_t *)ret_msg_addr;
   if (*val_size != 0) {
-    memcpy(val, (void*)(ret_msg_addr + sizeof(uint32_t)), *val_size);
+    memcpy(val, (void *)(ret_msg_addr + sizeof(uint32_t)), *val_size);
     return 0;
   }
   return -1;
 }
 
-int DMCClient::kv_set_2s(void* key,
-                         uint32_t key_size,
-                         void* val,
+int DMCClient::kv_set_2s(void *key, uint32_t key_size, void *val,
                          uint32_t val_size) {
-  *(uint8_t*)local_buf_ = IBMSG_REQ_SET;
-  *(uint16_t*)((uint64_t)local_buf_ + sizeof(uint8_t)) = my_sid_;
+  throw std::logic_error{"kv_set_2s: local cache does not support"};
+  *(uint8_t *)local_buf_ = IBMSG_REQ_SET;
+  *(uint16_t *)((uint64_t)local_buf_ + sizeof(uint8_t)) = my_sid_;
   uint64_t kv_addr = (uint64_t)local_buf_ + sizeof(uint8_t) + sizeof(uint16_t);
 
-  *(uint32_t*)kv_addr = key_size;
-  *(uint32_t*)(kv_addr + sizeof(uint32_t)) = val_size;
-  memcpy((void*)(kv_addr + 2 * sizeof(uint32_t)), key, key_size);
-  memcpy((void*)(kv_addr + 2 * sizeof(uint32_t) + key_size), val, val_size);
+  *(uint32_t *)kv_addr = key_size;
+  *(uint32_t *)(kv_addr + sizeof(uint32_t)) = val_size;
+  memcpy((void *)(kv_addr + 2 * sizeof(uint32_t)), key, key_size);
+  memcpy((void *)(kv_addr + 2 * sizeof(uint32_t) + key_size), val, val_size);
 
   // post rr fist
   uint64_t rand_rr_id = rand();
@@ -2519,29 +2490,25 @@ int DMCClient::kv_set_2s(void* key,
   assert(recv_wc.status == IBV_WC_SUCCESS);
   assert(recv_wc.opcode == IBV_WC_RECV);
   assert(recv_wc.wr_id == rand_rr_id);
-  assert(*(uint8_t*)((uint64_t)local_buf_ + block_size_) == IBMSG_REP_SET);
-  return *(int*)((uint64_t)local_buf_ + block_size_ + sizeof(uint8_t));
+  assert(*(uint8_t *)((uint64_t)local_buf_ + block_size_) == IBMSG_REP_SET);
+  return *(int *)((uint64_t)local_buf_ + block_size_ + sizeof(uint8_t));
 }
 
-int DMCClient::kv_get(void* key,
-                      uint32_t key_size,
-                      __OUT void* val,
-                      __OUT uint32_t* val_size) {
+int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
+                      __OUT uint32_t *val_size) {
   return kv_get_1s(key, key_size, val, val_size);
 }
 
-int DMCClient::kv_p_set(void* key,
-                        uint32_t key_size,
-                        void* val,
+int DMCClient::kv_p_set(void *key, uint32_t key_size, void *val,
                         uint32_t val_size) {
-  *(uint8_t*)local_buf_ = IBMSG_REQ_PSET;
-  *(uint16_t*)((uint64_t)local_buf_ + sizeof(uint8_t)) = my_sid_;
+  *(uint8_t *)local_buf_ = IBMSG_REQ_PSET;
+  *(uint16_t *)((uint64_t)local_buf_ + sizeof(uint8_t)) = my_sid_;
   uint64_t kv_addr = (uint64_t)local_buf_ + sizeof(uint8_t) + sizeof(uint16_t);
 
-  *(uint32_t*)kv_addr = key_size;
-  *(uint32_t*)(kv_addr + sizeof(uint32_t)) = val_size;
-  memcpy((void*)(kv_addr + 2 * sizeof(uint32_t)), key, key_size);
-  memcpy((void*)(kv_addr + 2 * sizeof(uint32_t) + key_size), val, val_size);
+  *(uint32_t *)kv_addr = key_size;
+  *(uint32_t *)(kv_addr + sizeof(uint32_t)) = val_size;
+  memcpy((void *)(kv_addr + 2 * sizeof(uint32_t)), key, key_size);
+  memcpy((void *)(kv_addr + 2 * sizeof(uint32_t) + key_size), val, val_size);
 
   // post rr fist
   struct ibv_recv_wr rr;
@@ -2580,13 +2547,11 @@ int DMCClient::kv_p_set(void* key,
   assert(recv_wc.status == IBV_WC_SUCCESS);
   assert(recv_wc.opcode == IBV_WC_RECV);
   assert(recv_wc.wr_id == 1);
-  assert(*(uint8_t*)((uint64_t)local_buf_ + block_size_) == IBMSG_REP_PSET);
-  return *(int*)((uint64_t)local_buf_ + block_size_ + sizeof(uint8_t));
+  assert(*(uint8_t *)((uint64_t)local_buf_ + block_size_) == IBMSG_REP_PSET);
+  return *(int *)((uint64_t)local_buf_ + block_size_ + sizeof(uint8_t));
 }
 
-int DMCClient::kv_set(void* key,
-                      uint32_t key_size,
-                      void* val,
+int DMCClient::kv_set(void *key, uint32_t key_size, void *val,
                       uint32_t val_size) {
   int ret = 0;
   if (eviction_type_ == EVICT_CLIQUEMAP) {
@@ -2598,17 +2563,16 @@ int DMCClient::kv_set(void* key,
   return ret;
 }
 
-void DMCClient::check_priority(KVOpsCtx* ctx) {
+void DMCClient::check_priority(KVOpsCtx *ctx) {
 #if FALSE
   int ret = nm_->rdma_read_sid_sync(0, ctx->init_bucket_raddr,
                                     server_rkey_map_[0], ctx->op_laddr,
                                     local_buf_mr_->lkey, sizeof(Bucket));
 
-  Slot* slot = (Slot*)(ctx->op_laddr);
-  SlotMeta* slotMeta = (SlotMeta*)(ctx->op_laddr + sizeof(SlotBucket));
+  Slot *slot = (Slot *)(ctx->op_laddr);
+  SlotMeta *slotMeta = (SlotMeta *)(ctx->op_laddr + sizeof(SlotBucket));
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
-    if (HashIndexConvert48To64Bits(slot[i].pointer) == 0)
-      continue;
+    if (HashIndexConvert48To64Bits(slot[i].pointer) == 0) continue;
     printd(L_INFO, "check %lx %lx %ld",
            ctx->init_bucket_raddr + sizeof(Slot) * i,
            ctx->init_bucket_raddr + sizeof(SlotBucket) + sizeof(SlotMeta) * i,
@@ -2630,8 +2594,7 @@ uint64_t DMCClient::get_slot_raddr(uint32_t slot_id) {
 }
 
 uint64_t DMCClient::adaptive_get_best_candidate(
-    const std::vector<uint64_t>& candidates,
-    __OUT uint8_t* expert_bmap) {
+    const std::vector<uint64_t> &candidates, __OUT uint8_t *expert_bmap) {
   std::map<uint64_t, float> candidate_weight_map;
   std::map<uint64_t, uint8_t> candidate_bmap_map;
   for (int i = 0; i < num_experts_; i++) {
@@ -2657,8 +2620,8 @@ uint64_t DMCClient::adaptive_get_best_candidate(
   return it->first;
 }
 
-int DMCClient::adaptive_get_best_candidate(const std::vector<int>& candidates,
-                                           __OUT uint8_t* expert_bmap) {
+int DMCClient::adaptive_get_best_candidate(const std::vector<int> &candidates,
+                                           __OUT uint8_t *expert_bmap) {
   std::map<int, float> candidate_weight_map;
   std::map<int, uint8_t> candidate_bmap_map;
   for (int i = 0; i < num_experts_; i++) {
@@ -2684,7 +2647,7 @@ int DMCClient::adaptive_get_best_candidate(const std::vector<int>& candidates,
   return it->first;
 }
 
-int DMCClient::adaptive_get_best_expert(__OUT uint8_t* expert_bmap) {
+int DMCClient::adaptive_get_best_expert(__OUT uint8_t *expert_bmap) {
   float max_weight = l_weights_[0];
   int max_idx = 0;
   for (int i = 1; i < num_experts_; i++) {
@@ -2697,7 +2660,7 @@ int DMCClient::adaptive_get_best_expert(__OUT uint8_t* expert_bmap) {
   return max_idx;
 }
 
-void DMCClient::adaptive_update_weights(KVOpsCtx* ctx) {
+void DMCClient::adaptive_update_weights(KVOpsCtx *ctx) {
   printd(L_DEBUG, "update weights");
   if (use_async_weight_)
     adaptive_update_weights_async(ctx);
@@ -2705,9 +2668,8 @@ void DMCClient::adaptive_update_weights(KVOpsCtx* ctx) {
     adaptive_update_weights_sync(ctx);
 }
 
-void DMCClient::adaptive_update_weights_sync(KVOpsCtx* ctx) {
-  if (ctx->hist_match == false)
-    return;
+void DMCClient::adaptive_update_weights_sync(KVOpsCtx *ctx) {
+  if (ctx->hist_match == false) return;
   printd(L_DEBUG, "update weights sync");
   num_adaptive_adjust_weights_++;
 
@@ -2732,9 +2694,8 @@ void DMCClient::adaptive_update_weights_sync(KVOpsCtx* ctx) {
   adaptive_sync_weights();
 }
 
-void DMCClient::adaptive_update_weights_async(KVOpsCtx* ctx) {
-  if (ctx->hist_match == false)
-    return;
+void DMCClient::adaptive_update_weights_async(KVOpsCtx *ctx) {
+  if (ctx->hist_match == false) return;
   printd(L_DEBUG, "adjust weights async");
   num_adaptive_adjust_weights_++;
 
@@ -2759,19 +2720,15 @@ void DMCClient::adaptive_update_weights_async(KVOpsCtx* ctx) {
   double sum = 0;
   for (int i = 0; i < num_experts_; i++) {
     l_weights_[i] *= std::exp(learning_rate_ * rewards[i]);
-    if (l_weights_[i] > 0.99)
-      l_weights_[i] = 0.99;
-    if (l_weights_[i] < 0.01)
-      l_weights_[i] = 0.01;
+    if (l_weights_[i] > 0.99) l_weights_[i] = 0.99;
+    if (l_weights_[i] < 0.01) l_weights_[i] = 0.01;
     sum += l_weights_[i];
   }
-  for (int i = 0; i < num_experts_; i++)
-    l_weights_[i] /= sum;
+  for (int i = 0; i < num_experts_; i++) l_weights_[i] /= sum;
 
   // record weight changing
   std::vector<float> tmp_vec;
-  for (int i = 0; i < num_experts_; i++)
-    tmp_vec.push_back(l_weights_[i]);
+  for (int i = 0; i < num_experts_; i++) tmp_vec.push_back(l_weights_[i]);
   weight_vec_.push_back(tmp_vec);
 
   // check local rewards
@@ -2837,35 +2794,33 @@ void DMCClient::adaptive_sync_weights() {
   assert(ret == 0);
   assert(wc.status == IBV_WC_SUCCESS);
   assert(wc.wr_id == 12302);
-  assert(*(uint8_t*)weights_sync_buf_ == IBMSG_REP_MERGE);
+  assert(*(uint8_t *)weights_sync_buf_ == IBMSG_REP_MERGE);
   memcpy(l_weights_, r_weights_, sizeof(float) * num_experts_);
   memset(weights_sync_buf_, 0, weights_sync_size);
   memset(reward_buf_, 0, sizeof(float) * num_experts_);
 }
 
-std::string DMCClient::get_str_key(KVOpsCtx* ctx) {
+std::string DMCClient::get_str_key(KVOpsCtx *ctx) {
   char key_buf[256] = {0};
   memcpy(key_buf, ctx->key, ctx->key_size);
   return std::string(key_buf);
 }
 
 void DMCClient::get_adaptive_weight_vec(
-    std::vector<std::vector<float>>& weight_vec) {
-  if (eviction_type_ != EVICT_SAMPLE_ADAPTIVE)
-    return;
+    std::vector<std::vector<float>> &weight_vec) {
+  if (eviction_type_ != EVICT_SAMPLE_ADAPTIVE) return;
   weight_vec = weight_vec_;
 }
 
-void DMCClient::get_adaptive_weights(std::vector<float>& adaptive_weights) {
-  if (eviction_type_ != EVICT_SAMPLE_ADAPTIVE)
-    return;
+void DMCClient::get_adaptive_weights(std::vector<float> &adaptive_weights) {
+  if (eviction_type_ != EVICT_SAMPLE_ADAPTIVE) return;
   adaptive_weights.clear();
   for (int i = 0; i < num_experts_; i++)
     adaptive_weights.push_back(l_weights_[i]);
 }
 
 void DMCClient::adaptive_get_expert_rank(
-    std::vector<std::pair<double, int>>& expert_rank) {
+    std::vector<std::pair<double, int>> &expert_rank) {
   expert_rank.clear();
   for (int i = 0; i < num_experts_; i++) {
     expert_rank.emplace_back(l_weights_[i], i);
@@ -2885,14 +2840,11 @@ uint64_t DMCClient::get_hist_head_raddr() {
     return naive_history_->hist_cntr_raddr();
 }
 
-void DMCClient::get_expert_evict_cnt(std::vector<uint32_t>& evict_cnt) {
-  if (eviction_type_ == EVICT_SAMPLE_ADAPTIVE)
-    evict_cnt = expert_evict_cnt_;
+void DMCClient::get_expert_evict_cnt(std::vector<uint32_t> &evict_cnt) {
+  if (eviction_type_ == EVICT_SAMPLE_ADAPTIVE) evict_cnt = expert_evict_cnt_;
 }
 
-void DMCClient::log_op(const char* op,
-                       void* key,
-                       uint32_t key_size,
+void DMCClient::log_op(const char *op, void *key, uint32_t key_size,
                        bool miss) {
   char key_buf[256] = {0};
   memcpy(key_buf, key, key_size);
@@ -2903,21 +2855,20 @@ void DMCClient::log_op(const char* op,
 }
 
 #ifdef USE_REWARDS
-void DMCClient::hit_adjust_weights(KVOpsCtx* ctx) {
+void DMCClient::hit_adjust_weights(KVOpsCtx *ctx) {
   uint32_t target_slot_id =
       (ctx->target_slot_laddr - ctx->bucket_laddr) / sizeof(Slot);
   uint64_t bucket_laddr = ctx->bucket_laddr;
 
   std::vector<std::pair<double, int>> prio_slot_id[num_experts_];
-  Slot* l_slot = (Slot*)ctx->bucket_laddr;
+  Slot *l_slot = (Slot *)ctx->bucket_laddr;
   for (int i = 0; i < HASH_BUCKET_ASSOC_NUM; i++) {
     uint64_t kv_raddr = HashIndexConvert48To64Bits(l_slot[i].atomic.pointer);
     if (l_slot[i].atomic.kv_len == 0) {
       continue;
     }
     if (lw_history_->is_in_history(&l_slot[i])) {
-      if (lw_history_->has_overwritten(ctx->read_hist_head, kv_raddr))
-        continue;
+      if (lw_history_->has_overwritten(ctx->read_hist_head, kv_raddr)) continue;
     } else {
       for (int j = 0; j < num_experts_; j++) {
         double prio = experts_[j]->parse_priority(&l_slot[i].meta,
@@ -2947,13 +2898,11 @@ void DMCClient::hit_adjust_weights(KVOpsCtx* ctx) {
   // find experts with the highest rank
   int _max = 0;
   for (int i = 0; i < num_experts_; i++) {
-    if (_max < expert_target_rank[i])
-      _max = expert_target_rank[i];
+    if (_max < expert_target_rank[i]) _max = expert_target_rank[i];
   }
   std::vector<int> reward_expert_list;
   for (int i = 0; i < num_experts_; i++) {
-    if (_max == expert_target_rank[i])
-      reward_expert_list.push_back(i);
+    if (_max == expert_target_rank[i]) reward_expert_list.push_back(i);
   }
 
   // reward experts
@@ -2977,14 +2926,11 @@ void DMCClient::hit_adjust_weights(KVOpsCtx* ctx) {
   double sum = 0;
   for (int i = 0; i < num_experts_; i++) {
     l_weights_[i] *= std::exp(learning_rate_ * rewards[i]);
-    if (l_weights_[i] > 0.99)
-      l_weights_[i] = 0.99;
-    if (l_weights_[i] < 0.01)
-      l_weights_[i] = 0.01;
+    if (l_weights_[i] > 0.99) l_weights_[i] = 0.99;
+    if (l_weights_[i] < 0.01) l_weights_[i] = 0.01;
     sum += l_weights_[i];
   }
-  for (int i = 0; i < num_experts_; i++)
-    l_weights_[i] /= sum;
+  for (int i = 0; i < num_experts_; i++) l_weights_[i] /= sum;
 
   if (local_reward_cntr_ < ADAPTIVE_NUM_LOCAL_REWARD) {
     local_reward_cntr_++;
@@ -2994,7 +2940,7 @@ void DMCClient::hit_adjust_weights(KVOpsCtx* ctx) {
   }
 }
 
-void DMCClient::get_expert_reward_cnt(std::vector<uint32_t>& reward_cnt) {
+void DMCClient::get_expert_reward_cnt(std::vector<uint32_t> &reward_cnt) {
   reward_cnt = expert_reward_cnt_;
 }
 #endif

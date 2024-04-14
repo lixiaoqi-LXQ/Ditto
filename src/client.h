@@ -1,14 +1,14 @@
 #ifndef _DMC_CLIENT_H_
 #define _DMC_CLIENT_H_
 
+#include <infiniband/verbs.h>
+
 #include <list>
 #include <map>
 #include <queue>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <infiniband/verbs.h>
 
 #include "client_mm.h"
 #include "cms.h"
@@ -221,19 +221,12 @@ class DMCClient {
   uint64_t get_sys_start_ts();
 
   // common op
-  void create_op_ctx(__OUT KVOpsCtx* ctx,
-                     void* key,
-                     uint32_t key_size,
-                     void* val,
-                     uint32_t val_size,
-                     uint8_t op_type);
-  void get_init_bucket_raddr(uint64_t hash,
-                             __OUT uint64_t* r_addr,
+  void create_op_ctx(__OUT KVOpsCtx* ctx, void* key, uint32_t key_size,
+                     void* val, uint32_t val_size, uint8_t op_type);
+  void get_init_bucket_raddr(uint64_t hash, __OUT uint64_t* r_addr,
                              __OUT uint16_t* server);
-  void get_slot_raddr(const KVOpsCtx* ctx,
-                      uint64_t slot_laddr,
-                      __OUT uint64_t* r_addr,
-                      __OUT uint16_t* server);
+  void get_slot_raddr(const KVOpsCtx* ctx, uint64_t slot_laddr,
+                      __OUT uint64_t* r_addr, __OUT uint16_t* server);
 
   void match_fp_and_find_empty(KVOpsCtx* ctx);
   void read_and_find_kv(
@@ -248,8 +241,7 @@ class DMCClient {
 
   // kv_get
   void kv_get_read_index(KVOpsCtx* ctx);
-  void kv_get_copy_value(KVOpsCtx* ctx,
-                         __OUT void* val,
+  void kv_get_copy_value(KVOpsCtx* ctx, __OUT void* val,
                          __OUT uint32_t* val_len);
 
   // remote list
@@ -285,8 +277,7 @@ class DMCClient {
   void check_priority(KVOpsCtx* ctx);
 
   // generate new header
-  void gen_info_meta(KVOpsCtx* ctx,
-                     uint32_t info_update_mask,
+  void gen_info_meta(KVOpsCtx* ctx, uint32_t info_update_mask,
                      __OUT SlotMeta* meta);
   void gen_info_update_mask(const SlotMeta* meta,
                             __OUT uint32_t* info_update_mask);
@@ -317,9 +308,7 @@ class DMCClient {
   void count_expert_evict(uint8_t expert_bmap);
 
   // 1-sided get
-  int kv_get_1s(void* key,
-                uint32_t key_size,
-                __OUT void* val,
+  int kv_get_1s(void* key, uint32_t key_size, __OUT void* val,
                 __OUT uint32_t* val_size);
 
   int kv_set_1s(void* key, uint32_t key_size, void* val, uint32_t val_size);
@@ -336,13 +325,9 @@ class DMCClient {
   void clear_counters();
   DMCClient(const DMCConfig* conf);
   ~DMCClient();
-  int kv_get(void* key,
-             uint32_t key_size,
-             __OUT void* val,
+  int kv_get(void* key, uint32_t key_size, __OUT void* val,
              __OUT uint32_t* val_size);
-  int kv_get_2s(void* key,
-                uint32_t key_size,
-                __OUT void* val,
+  int kv_get_2s(void* key, uint32_t key_size, __OUT void* val,
                 __OUT uint32_t* val_size);
   int kv_p_set(void* key, uint32_t key_size, void* val, uint32_t val_size);
   int kv_set(void* key, uint32_t key_size, void* val, uint32_t val_size);

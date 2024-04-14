@@ -1,6 +1,11 @@
 import json
 import os
 
+def dump_output(fname, out, append=True):
+    if not os.path.exists('./results'):
+        os.mkdir('./results')
+    with open(f'results/{fname}.txt', 'a' if append else 'w') as f:
+        f.write(out)
 
 def save_res(fname, dict):
     # save file to the results directory

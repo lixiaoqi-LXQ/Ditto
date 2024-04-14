@@ -13,3 +13,5 @@ scripts/install/*
 *__pycache__
 **/tmp*
 **/*.log
+**/*.json
+**/*.txt

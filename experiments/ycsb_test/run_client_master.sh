@@ -19,4 +19,13 @@ num_all_clients=$5
 
 # memcached_ip="10.10.1.1"
 
-../../build/experiments/init -C -c ../configs/$config_fname -w $workload -m $memcached_ip -n -1 -i $st_server_id -t $num_threads -A $num_all_clients -T 20
+../../build/experiments/init\
+    -C\
+    -c ../configs/$config_fname\
+    -w $workload\
+    -m $memcached_ip\
+    -n -1\
+    -i $st_server_id\
+    -t $num_threads\
+    -A $num_all_clients\
+    -T 20

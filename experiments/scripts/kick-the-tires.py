@@ -2,7 +2,7 @@ import time
 import json
 import sys
 
-from utils.utils import save_time
+from utils.utils import save_time, dump_output
 from utils.cmd_manager import CMDManager
 from utils.settings import get_cache_config_cmd, get_make_cmd, get_freq_cache_cmd, get_mn_cpu_cmd
 
@@ -66,12 +66,21 @@ for i in range(num_CN):
             f"cd {work_dir} && ./run_client_master.sh sample-adaptive {st_cid} {workload} {NUM_CLIENT_PER_NODE} {client_num}")
     c_prom_list.append(c_prom)
 
-# wait Clients and MN
+# wait Clients
 for i, c_prom in enumerate(c_prom_list):
     res = c_prom.join()
-    print(f"===============client-{i+1}-stdout===============")
-    print(f"client-{i+1}-stdout: {res.stdout}")
-mn_prom.join()
+
+    dump_output(
+        "stdout-client-kick-the-tires",
+        f"===============client-{i+1}-stdout===============\n" + res.stdout,
+        i != 0
+    )
+    # print(f"===============client-{i+1}-stdout===============")
+    # print(f"client-{i+1}-stdout: {res.stdout}")
+
+# wait MN
+res = mn_prom.join()
+dump_output("stdout-server-kick-the-tires", res.stdout)
 
 raw_res = controller_prom.join()
 line = raw_res.tail("stdout", 1).strip()

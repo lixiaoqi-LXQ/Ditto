@@ -1,11 +1,12 @@
 #include "run_client.h"
-#include "memcached.h"
-#include "third_party/json.hpp"
-#include "workload.h"
 
 #include <assert.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+#include "memcached.h"
+#include "third_party/json.hpp"
+#include "workload.h"
 
 using json = nlohmann::json;
 
@@ -23,12 +24,9 @@ static bool is_real_workload(const char* workload_name) {
          memcmp(workload_name, "mix", strlen("mix")) == 0;
 }
 
-static void get_workload_kv(DMCWorkload* wl,
-                            uint32_t idx,
-                            __OUT uint64_t* key_addr,
-                            __OUT uint64_t* val_addr,
-                            __OUT uint32_t* key_size,
-                            __OUT uint32_t* val_size,
+static void get_workload_kv(DMCWorkload* wl, uint32_t idx,
+                            __OUT uint64_t* key_addr, __OUT uint64_t* val_addr,
+                            __OUT uint32_t* key_size, __OUT uint32_t* val_size,
                             __OUT uint8_t* op) {
   idx = idx % wl->num_ops;
   *key_addr = ((uint64_t)wl->key_buf + idx * 128);
@@ -73,8 +71,7 @@ void* client_evict_micro_main(void* _args) {
     sprintf(val_buf, "%d-val_%d", args->cid, cnt);
     ret = client->kv_set(key_buf, strlen(key_buf) + 1, val_buf,
                          strlen(val_buf) + 1);
-    if (client->num_evict_ != 0)
-      break;
+    if (client->num_evict_ != 0) break;
   }
 
   // sync to start evicting
@@ -179,8 +176,7 @@ void* client_micro_main(void* _args) {
       assert(ret == 0);
       assert(strcmp(tmp_buf, val_buf) == 0);
     }
-    if (diff_ts_us(&tet, &st) > 10000000)
-      break;
+    if (diff_ts_us(&tet, &st) > 10000000) break;
   }
   // prepare and publish get result
   json res;
@@ -220,8 +216,7 @@ void* client_micro_main(void* _args) {
       n_get_success++;
     else
       n_get_failure++;
-    if (diff_ts_us(&tet, &st) > 10000000)
-      break;
+    if (diff_ts_us(&tet, &st) > 10000000) break;
   }
   // prepare get results
   res.clear();
@@ -259,8 +254,7 @@ void* client_micro_main(void* _args) {
       assert(ret == 0);
       assert(strcmp(tmp_buf, val_buf) == 0);
     }
-    if (diff_ts_us(&tet, &st) > 10000000)
-      break;
+    if (diff_ts_us(&tet, &st) > 10000000) break;
   }
   // prepare upd results
   res.clear();
@@ -326,8 +320,7 @@ void* client_hit_rate_real(void* _args) {
     }
     warmup_seq++;
     gettimeofday(&tet, NULL);
-    if (diff_ts_us(&tet, &st) > 10LL * 1000000)
-      break;
+    if (diff_ts_us(&tet, &st) > 10LL * 1000000) break;
   }
   printd(L_INFO, "client %d warmup %d ops\n", args->cid, warmup_seq);
 
@@ -364,8 +357,7 @@ void* client_hit_rate_real(void* _args) {
     }
     lat_map[diff_ts_us(&tet, &tst)]++;
     n_op++;
-    if (diff_ts_us(&tet, &st) > args->run_tims_s * 1000000)
-      break;
+    if (diff_ts_us(&tet, &st) > args->run_tims_s * 1000000) break;
   }
   // sync results
   json res;
@@ -532,10 +524,10 @@ void* client_hit_rate(void* _args) {
                                   strlen(res_str.c_str()), args->cid);
 
   printd(L_INFO, "Client %d miss rate: %f\n", args->cid, (float)n_miss / n_op);
-  printd(L_INFO, 
-      "n_get: %d, n_set: %d\nn_get_miss: %d, n_set_miss: %d, n_set_miss_c: "
-      "%d\n",
-      n_get, n_set, n_get_miss, n_set_miss, client->n_set_miss_);
+  printd(L_INFO,
+         "n_get: %d, n_set: %d\nn_get_miss: %d, n_set_miss: %d, n_set_miss_c: "
+         "%d\n",
+         n_get, n_set, n_get_miss, n_set_miss, client->n_set_miss_);
   printd(L_INFO, "n_miss: %d, n_eviction: %d\n", n_miss, client->num_evict_);
   return NULL;
 }
@@ -737,11 +729,9 @@ void* client_ycsb_ela_cpu(void* _args) {
   printd(L_INFO, "client %d waiting sync", args->cid);
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
-  if (args->cid > 32)
-    con_client.memcached_wait("scale-to-64");
+  if (args->cid > 32) con_client.memcached_wait("scale-to-64");
   printd(L_INFO, "Client %d started trans\n", args->cid);
-  if (args->is_load_only)
-    return NULL;  // return loader thread
+  if (args->is_load_only) return NULL;  // return loader thread
 
   uint32_t seq = 0;
   uint32_t n_get = 0;
@@ -980,8 +970,7 @@ void client_ycsb_ela_cpu_fiber_worker(ClientFiberArgs* args) {
   client->clear_counters();
   if (args->fb_id == 0) {
     con_client.memcached_sync_ready(args->cid);
-    if (args->cid > 32)
-      con_client.memcached_wait("scale-to-64");
+    if (args->cid > 32) con_client.memcached_wait("scale-to-64");
     args->start_trans_barrier->wait();
   } else {
     con_client.increase_result_cntr();
@@ -1339,10 +1328,9 @@ void* client_ycsb(void* _args) {
   printd(L_INFO, "client %d waiting sync", args->cid);
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
-  if (args->is_load_only)
-  {
+  if (args->is_load_only) {
     printd(L_INFO, "client %d is load-only, exiting now", args->cid);
-    return NULL; // return loader thread
+    return NULL;  // return loader thread
   }
 
   gettimeofday(&st, NULL);
@@ -1363,8 +1351,7 @@ void* client_ycsb(void* _args) {
       n_get++;
       gettimeofday(&tst, NULL);
       ret = client->kv_get((void*)key_addr, key_size, tmp_buf, &tmp_len);
-      if (ret == -1)
-        get_miss++;
+      if (ret == -1) get_miss++;
       gettimeofday(&tet, NULL);
       // assert(ret == 0); // disable this on ycsbd
     } else {
@@ -1372,8 +1359,7 @@ void* client_ycsb(void* _args) {
       gettimeofday(&tst, NULL);
       ret =
           client->kv_set((void*)key_addr, key_size, (void*)val_addr, val_size);
-      if (ret == -1)
-        set_miss++;
+      if (ret == -1) set_miss++;
       gettimeofday(&tet, NULL);
     }
     lat_map[diff_ts_us(&tet, &tst)]++;
@@ -1395,7 +1381,8 @@ void* client_ycsb(void* _args) {
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printd(L_INFO, "Client %d sync: %ld\n", args->cid, client->num_cliquemap_sync_);
+  printd(L_INFO, "Client %d sync: %ld\n", args->cid,
+         client->num_cliquemap_sync_);
   return NULL;
 }
 
@@ -1742,8 +1729,8 @@ void* client_workload_real_ela_mem(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
-         (float)n_miss / seq);
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid,
+         seq, (float)n_miss / seq);
   return NULL;
 }
 
@@ -1895,8 +1882,8 @@ void* client_workload_real_n(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
-         (float)n_miss / seq);
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid,
+         seq, (float)n_miss / seq);
   return NULL;
 }
 
@@ -2023,8 +2010,8 @@ void* client_workload_change(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
-         (float)n_miss / seq);
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid,
+         seq, (float)n_miss / seq);
   return NULL;
 }
 void* client_workload_real(void* _args) {
@@ -2174,8 +2161,8 @@ void* client_workload_real(void* _args) {
   std::string str = res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);
-  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid, seq,
-         (float)n_miss / seq);
+  printd(L_INFO, "Client %d finished %d ops with %f miss ratio\n", args->cid,
+         seq, (float)n_miss / seq);
   return NULL;
 }
 typedef struct _CheckerArgs {
@@ -2328,6 +2315,10 @@ void run_client(const InitArgs* args) {
   for (int i = 0; i < args->num_client_threads; i++) {
     pthread_join(client_tid_list[i], NULL);
   }
-  if (args->elastic == ELA_MEM)
-  	pthread_join(checker_tid, NULL);
+
+  if (args->elastic == ELA_MEM) pthread_join(checker_tid, NULL);
+
+#ifndef USE_FIBER  // free client
+  for (int i = 0; i < num_clients; i++) delete client_list[i];
+#endif
 }
