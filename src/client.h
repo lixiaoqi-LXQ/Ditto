@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "client_cache.hh"
 #include "client_mm.h"
 #include "cms.h"
 #include "dmc_table.h"
@@ -93,6 +94,9 @@ typedef struct _KVOpsCtx {
 
   // for indicating return value
   uint8_t ret;
+
+  // client-side cache
+  bool lcache_hit;
 } KVOpsCtx;
 
 class DMCClient {
@@ -180,6 +184,11 @@ class DMCClient {
 
   // for debug
   FILE* log_f_;
+
+  // client-side cache
+  ClientCache local_cache;
+  // get time vec
+  std::vector<uint64_t> gtv_l, gtv_R, gtv_l_success, gtv_R_success;
 
  public:
   // counters
@@ -313,6 +322,12 @@ class DMCClient {
 
   int kv_set_1s(void* key, uint32_t key_size, void* val, uint32_t val_size);
   int kv_set_2s(void* key, uint32_t key_size, void* val, uint32_t val_size);
+
+  // client-side cache
+  int kv_get_locally(void* key, uint32_t key_size, __OUT void* val,
+                     __OUT uint32_t* val_size);
+  int kv_set_1s_locally(void* key, uint32_t key_size, void* val,
+                        uint32_t val_size);
 
   void log_op(const char* op, void* key, uint32_t key_size, bool miss);
 

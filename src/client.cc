@@ -1,7 +1,7 @@
-
 #include "client.h"
 
 #include <assert.h>
+#include <bits/stdc++.h>
 #include <stddef.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -91,6 +91,18 @@ DMCClient::DMCClient(const DMCConfig *conf) {
 }
 
 DMCClient::~DMCClient() {
+  auto get_avg = [](const std::vector<uint64_t> &vec) {
+    if (vec.size() == 0) return 0.;
+    return std::accumulate(vec.begin(), vec.end(), 0.) / vec.size();
+  };
+  auto gt_l = get_avg(gtv_l);
+  auto gt_R = get_avg(gtv_R);
+  auto gt_l_success = get_avg(gtv_l_success);
+  auto gt_R_success = get_avg(gtv_R_success);
+  printd(L_INFO, "client-%u get info: local %fus/%fus, RDMA %fus/%fus", my_sid_,
+         gt_l_success, gt_l, gt_R_success, gt_R);
+  printd(L_INFO, "client-%u local cache info: num_hit %u, num_miss %u", my_sid_,
+         local_cache.get_num_hit(), local_cache.get_num_miss());
   delete nm_;
   delete mm_;
 }
@@ -1692,6 +1704,20 @@ kv_set_1s_retry:
   return set_miss ? -1 : 0;
 }
 
+int DMCClient::kv_get_locally(void *key, uint32_t key_size, __OUT void *val,
+                              __OUT uint32_t *val_size) {
+  uint32_t res = local_cache.get(key, key_size, val);
+
+  // not found in local cache
+  if (res == 0) return -1;
+
+  *val_size = res;
+  // TODO: update metadata
+  // KVOpsCtx ctx{.key = key, .lcache_hit = true};
+  // update_priority(&ctx);
+  return 0;
+}
+
 int DMCClient::kv_get_1s(void *key, uint32_t key_size, __OUT void *val,
                          __OUT uint32_t *val_size) {
   char key_buf[256] = {0};
@@ -2497,6 +2523,34 @@ int DMCClient::kv_set_2s(void *key, uint32_t key_size, void *val,
 int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
                       __OUT uint32_t *val_size) {
   return kv_get_1s(key, key_size, val, val_size);
+
+  int res;
+  struct timeval start, end;
+  uint64_t during;
+
+  // fetch locally
+  gettimeofday(&start, nullptr);
+  res = kv_get_locally(key, key_size, val, val_size);
+  gettimeofday(&end, nullptr);
+  during = diff_ts_us(&end, &start);
+  gtv_l.push_back(during);
+  if (res == 0) {
+    gtv_l_success.push_back(during);
+    return 0;
+  }
+
+  // fetch from MN
+  gettimeofday(&start, nullptr);
+  res = kv_get_1s(key, key_size, val, val_size);
+  gettimeofday(&end, nullptr);
+  during = diff_ts_us(&end, &start);
+  gtv_R.push_back(during);
+  if (res == 0) {
+    gtv_R_success.push_back(during);
+    local_cache.set(key, key_size, val, *val_size);
+    return 0;
+  }
+  return -1;
 }
 
 int DMCClient::kv_p_set(void *key, uint32_t key_size, void *val,
@@ -2558,6 +2612,7 @@ int DMCClient::kv_set(void *key, uint32_t key_size, void *val,
     ret = kv_set_2s(key, key_size, val, val_size);
   } else {
     ret = kv_set_1s(key, key_size, val, val_size);
+    // local_cache.set(key, key_size, val, val_size);
   }
   n_set_miss_ += (ret < 0);
   return ret;
