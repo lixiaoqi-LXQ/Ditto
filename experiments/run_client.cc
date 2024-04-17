@@ -1323,9 +1323,9 @@ void* client_ycsb(void* _args) {
   con_client.memcached_put_result((void*)load_res_str.c_str(),
                                   strlen(load_res_str.c_str()), args->cid);
 
-  // sync to do trans
+  // sync to do warmup
   lat_map.clear();
-  printd(L_INFO, "client %d waiting sync", args->cid);
+  printd(L_INFO, "client %d waiting sync (before warmup)", args->cid);
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
   if (args->is_load_only) {
@@ -1333,11 +1333,37 @@ void* client_ycsb(void* _args) {
     return NULL;  // return loader thread
   }
 
+  // warmup
+  gettimeofday(&st, NULL);
+  // for (uint32_t seq = 0; true; seq = (seq + 1) % trans_wl.num_ops) {
+  while (true) {
+    uint32_t idx = (uint32_t)random() % trans_wl.num_ops;
+    uint64_t key_addr, val_addr;
+    uint32_t key_size, val_size;
+    uint8_t op;
+    get_workload_kv(&trans_wl, idx, &key_addr, &val_addr, &key_size, &val_size,
+                    &op);
+    if (op == GET) {
+      client->kv_get((void*)key_addr, key_size, tmp_buf, &tmp_len);
+    } else {
+      client->kv_set((void*)key_addr, key_size, (void*)val_addr, val_size);
+    }
+    gettimeofday(&tet, nullptr);
+    if (diff_ts_us(&tet, &st) > 40 * 1000000 or client->is_local_cache_full()) {
+      break;
+    }
+  }
+  auto warmup_time = (double)diff_ts_us(&tet, &st) / 1000;
+  auto lcache_count = client->get_local_cache_num();
+
+  // sync to do trans
+  printd(L_INFO, "client %d waiting sync (before trans)", args->cid);
+  client->clear_counters();
+  con_client.memcached_sync_ready(args->cid);
   gettimeofday(&st, NULL);
   uint32_t seq = 0;
   uint32_t n_get = 0;
   uint32_t n_set = 0;
-  uint32_t get_miss{0}, set_miss{0};
   while (true) {
     uint32_t idx = seq % trans_wl.num_ops;
     uint64_t key_addr, val_addr;
@@ -1345,13 +1371,10 @@ void* client_ycsb(void* _args) {
     uint8_t op;
     get_workload_kv(&trans_wl, idx, &key_addr, &val_addr, &key_size, &val_size,
                     &op);
-    // if (strcmp((char *)key_addr, "8457711521909979413") == 0) printd(L_INFO,
-    // "op: %d %s", op, (char *)key_addr);
     if (op == GET) {
       n_get++;
       gettimeofday(&tst, NULL);
       ret = client->kv_get((void*)key_addr, key_size, tmp_buf, &tmp_len);
-      if (ret == -1) get_miss++;
       gettimeofday(&tet, NULL);
       // assert(ret == 0); // disable this on ycsbd
     } else {
@@ -1359,7 +1382,6 @@ void* client_ycsb(void* _args) {
       gettimeofday(&tst, NULL);
       ret =
           client->kv_set((void*)key_addr, key_size, (void*)val_addr, val_size);
-      if (ret == -1) set_miss++;
       gettimeofday(&tet, NULL);
     }
     lat_map[diff_ts_us(&tet, &tst)]++;
@@ -1369,15 +1391,20 @@ void* client_ycsb(void* _args) {
     }
   }
   printd(L_INFO, "Client %d finish\n", args->cid);
+  auto& cnters = client->get_counters_local();
+  double hit_rate = (double)cnters.num_hit / cnters.num_get;
+
   json trans_res;
   trans_res["ops"] = seq;
   trans_res["n_get"] = n_get;
   trans_res["n_set"] = n_set;
   trans_res["n_retry"] = client->num_set_retry_;
   trans_res["n_evict"] = client->num_evict_;
+  trans_res["hit_rate_local"] = hit_rate;
   trans_res["lat_map"] = json(lat_map);
-  trans_res["get_miss"] = get_miss;
-  trans_res["set_miss"] = set_miss;
+  trans_res["warmup_up_time"] = warmup_time;
+  trans_res["local_cache_num_before_trans"] = lcache_count;
+
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),
                                   args->cid);

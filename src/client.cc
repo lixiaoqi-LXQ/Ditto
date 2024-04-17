@@ -91,18 +91,6 @@ DMCClient::DMCClient(const DMCConfig *conf) {
 }
 
 DMCClient::~DMCClient() {
-  auto get_avg = [](const std::vector<uint64_t> &vec) {
-    if (vec.size() == 0) return 0.;
-    return std::accumulate(vec.begin(), vec.end(), 0.) / vec.size();
-  };
-  auto gt_l = get_avg(gtv_l);
-  auto gt_R = get_avg(gtv_R);
-  auto gt_l_success = get_avg(gtv_l_success);
-  auto gt_R_success = get_avg(gtv_R_success);
-  printd(L_INFO, "client-%u get info: local %fus/%fus, RDMA %fus/%fus", my_sid_,
-         gt_l_success, gt_l, gt_R_success, gt_R);
-  printd(L_INFO, "client-%u local cache info: num_hit %u, num_miss %u", my_sid_,
-         local_cache.get_num_hit(), local_cache.get_num_miss());
   delete nm_;
   delete mm_;
 }
@@ -252,6 +240,7 @@ void DMCClient::clear_counters() {
   num_hit_rewards_ = 0;
   expert_reward_cnt_.resize(MAX_NUM_EXPERTS);
 #endif
+  local_cache.clear_counters();
 }
 
 void DMCClient::get_init_bucket_raddr(uint64_t hash, __OUT uint64_t *r_addr,
@@ -2522,35 +2511,40 @@ int DMCClient::kv_set_2s(void *key, uint32_t key_size, void *val,
 
 int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
                       __OUT uint32_t *val_size) {
-  return kv_get_1s(key, key_size, val, val_size);
-
-  int res;
-  struct timeval start, end;
-  uint64_t during;
-
-  // fetch locally
-  gettimeofday(&start, nullptr);
-  res = kv_get_locally(key, key_size, val, val_size);
-  gettimeofday(&end, nullptr);
-  during = diff_ts_us(&end, &start);
-  gtv_l.push_back(during);
-  if (res == 0) {
-    gtv_l_success.push_back(during);
+  if (kv_get_locally(key, key_size, val, val_size) == 0)
     return 0;
-  }
-
-  // fetch from MN
-  gettimeofday(&start, nullptr);
-  res = kv_get_1s(key, key_size, val, val_size);
-  gettimeofday(&end, nullptr);
-  during = diff_ts_us(&end, &start);
-  gtv_R.push_back(during);
-  if (res == 0) {
-    gtv_R_success.push_back(during);
+  else if (kv_get_1s(key, key_size, val, val_size) == 0) {
     local_cache.set(key, key_size, val, *val_size);
     return 0;
-  }
-  return -1;
+  } else
+    return -1;
+  /*   int res;
+    struct timeval start, end;
+    uint64_t during;
+
+    // fetch locally
+    gettimeofday(&start, nullptr);
+    res = kv_get_locally(key, key_size, val, val_size);
+    gettimeofday(&end, nullptr);
+    during = diff_ts_us(&end, &start);
+    gtv_l.push_back(during);
+    if (res == 0) {
+      gtv_l_success.push_back(during);
+      return 0;
+    }
+
+    // fetch from MN
+    gettimeofday(&start, nullptr);
+    res = kv_get_1s(key, key_size, val, val_size);
+    gettimeofday(&end, nullptr);
+    during = diff_ts_us(&end, &start);
+    gtv_R.push_back(during);
+    if (res == 0) {
+      gtv_R_success.push_back(during);
+      local_cache.set(key, key_size, val, *val_size);
+      return 0;
+    }
+    return -1; */
 }
 
 int DMCClient::kv_p_set(void *key, uint32_t key_size, void *val,

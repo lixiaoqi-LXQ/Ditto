@@ -357,6 +357,11 @@ class DMCClient {
   inline uint8_t get_evict_type() { return eviction_type_; }
 
   inline void scale_memory() { server_oom_ = false; }
+
+  // client-side cache
+  const CCCounter& get_counters_local() const { return local_cache.get_nums(); }
+  bool is_local_cache_full() const { return local_cache.is_full(); }
+  uint32_t get_local_cache_num() const { return local_cache.count(); }
 };
 
 #endif

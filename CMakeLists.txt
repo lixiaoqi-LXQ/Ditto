@@ -18,6 +18,7 @@ set(use_penalty ON CACHE BOOL "set USE_PENALTY")
 set(multi_policy OFF CACHE BOOL "set MULTI_POLICY")
 set(hash_bucket_assoc 8 CACHE STRING "set HASH_BUCKET_ASSOC_NUM")
 set(hash_bucket_num 17170432 CACHE STRING "set HASH_NUM_BUCKETS")
+set(client_cache_limit 10000 CACHE STRING "set CLIENT_CACHE_LIMIT")
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_DEBUG")
@@ -63,6 +64,7 @@ endif()
 
 message("hash_bucket_assoc=${hash_bucket_assoc}")
 message("hash_bucket_num=${hash_bucket_num}")
+message("client_cache_limit=${client_cache_limit}")
 
 add_subdirectory(src)
 add_subdirectory(experiments)

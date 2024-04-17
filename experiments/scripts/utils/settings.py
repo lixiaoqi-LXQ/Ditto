@@ -350,7 +350,8 @@ cmake_templates = {
     'use_penalty': '-Duse_penalty={}',
     'multi_policy': '-Dmulti_policy={}',
     'hash_bucket_assoc': '-Dhash_bucket_assoc={}',
-    'hash_bucket_num': '-Dhash_bucket_num={}'
+    'hash_bucket_num': '-Dhash_bucket_num={}',
+    'client_cache_limit': '-Dclient_cache_limit={}',
 }
 
 running_default_opt = {

@@ -16,7 +16,9 @@ add_library(libdmc SHARED ${source_dmc})
 
 target_compile_definitions(libdmc PUBLIC
     HASH_BUCKET_ASSOC_NUM=${hash_bucket_assoc}LL
-    HASH_NUM_BUCKETS=${hash_bucket_num}LL)
+    HASH_NUM_BUCKETS=${hash_bucket_num}LL
+    CLIENT_CACHE_LIMIT=${client_cache_limit}LL
+)
 
 if(use_shard_pqueue)
     target_compile_definitions(libdmc PUBLIC USE_SHARD_PQUEUE NUM_PQUEUE_SHARDS=${num_pqueue_shards})
