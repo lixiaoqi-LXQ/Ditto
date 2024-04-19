@@ -187,8 +187,9 @@ class DMCClient {
 
   // client-side cache
   ClientCache local_cache;
+  KVOpsCtx glob_ctx;
   // get time vec
-  std::vector<uint64_t> gtv_l, gtv_R, gtv_l_success, gtv_R_success;
+  // std::vector<uint64_t> gtv_l, gtv_R, gtv_l_success, gtv_R_success;
 
  public:
   // counters
@@ -328,6 +329,7 @@ class DMCClient {
                      __OUT uint32_t* val_size);
   int kv_set_1s_locally(void* key, uint32_t key_size, void* val,
                         uint32_t val_size);
+  bool update_priority_local_cache(const Slot& slot, uint64_t slot_raddr);
 
   void log_op(const char* op, void* key, uint32_t key_size, bool miss);
 
@@ -361,7 +363,7 @@ class DMCClient {
   // client-side cache
   const CCCounter& get_counters_local() const { return local_cache.get_nums(); }
   bool is_local_cache_full() const { return local_cache.is_full(); }
-  uint32_t get_local_cache_num() const { return local_cache.count(); }
+  size_t get_local_cache_num() const { return local_cache.count(); }
 };
 
 #endif

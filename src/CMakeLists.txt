@@ -10,6 +10,7 @@ list(APPEND source_dmc
     priority.cc
     rlist.cc
     fifo_history.cc
+    client_cache.cc
 )
 
 add_library(libdmc SHARED ${source_dmc})

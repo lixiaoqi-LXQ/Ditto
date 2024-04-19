@@ -14,6 +14,8 @@
 #include "dmc_table.h"
 #include "ib.h"
 
+using namespace std::placeholders;
+
 DMCClient::DMCClient(const DMCConfig *conf) {
   evict_bucket_cnt_.clear();
   srand(conf->server_id);
@@ -88,9 +90,15 @@ DMCClient::DMCClient(const DMCConfig *conf) {
   }
 
   init_eviction(conf);
+  local_cache.set_call_back([this](const Slot &slot, uint64_t raddr) {
+    return update_priority_local_cache(slot, raddr);
+  });
 }
 
 DMCClient::~DMCClient() {
+  auto counter = local_cache.get_nums();
+  printd(L_INFO, "local cache metadata-updates/evcits: %u/%u",
+         counter.num_update, counter.num_evict);
   delete nm_;
   delete mm_;
 }
@@ -1277,6 +1285,37 @@ void DMCClient::gen_info_meta(KVOpsCtx *ctx, uint32_t info_update_mask,
   }
 }
 
+bool DMCClient::update_priority_local_cache(const Slot &slot,
+                                            uint64_t slot_raddr) {
+  auto rslot_valid = [&slot](const Slot &rslot) {
+    return slot.atomic.fp == rslot.atomic.fp and
+           slot.meta.acc_info.key_hash == rslot.meta.acc_info.key_hash and
+           slot.meta.acc_info.ins_ts == rslot.meta.acc_info.ins_ts;
+  };
+  uint32_t lkey = local_buf_mr_->lkey;
+  uint32_t rkey = server_rkey_map_[0];
+
+  // read remote slot
+  Slot *rslot = (Slot *)local_buf_;
+  memset(rslot, 0, sizeof(Slot));
+  nm_->rdma_read_sid_sync(0, slot_raddr, rkey, (uint64_t)rslot, lkey,
+                          sizeof(Slot));
+
+  if (not rslot_valid(*rslot)) return false;
+
+  // setup new meta and write back
+  Priority *cur_prio =
+      is_evict_adaptive(eviction_type_) ? experts_[0] : priority_;
+  SlotMeta new_meta;
+  new_meta.acc_info.acc_ts = slot.meta.acc_info.acc_ts;
+  new_meta.acc_info.counter = cur_prio->get_counter_val(&slot.meta, 1);
+  new_meta.acc_info.freq = slot.meta.acc_info.freq + rslot->meta.acc_info.freq;
+  nm_->rdma_inl_write_sid_async(
+      0, slot_raddr + SLOT_META_OFF + SLOTM_INFO_ACC_TS_OFF, rkey,
+      (uint64_t)&new_meta + SLOTM_INFO_ACC_TS_OFF, 0, sizeof(uint64_t) * 3);
+  return true;
+}
+
 void DMCClient::update_priority_sample_naive(KVOpsCtx *ctx) {
   printd(L_DEBUG, "update_priority_naive");
   int ret = 0;
@@ -1701,9 +1740,6 @@ int DMCClient::kv_get_locally(void *key, uint32_t key_size, __OUT void *val,
   if (res == 0) return -1;
 
   *val_size = res;
-  // TODO: update metadata
-  // KVOpsCtx ctx{.key = key, .lcache_hit = true};
-  // update_priority(&ctx);
   return 0;
 }
 
@@ -1712,7 +1748,7 @@ int DMCClient::kv_get_1s(void *key, uint32_t key_size, __OUT void *val,
   char key_buf[256] = {0};
   memcpy(key_buf, key, key_size);
   printd(L_DEBUG, "get %s", key_buf);
-  KVOpsCtx ctx;
+  KVOpsCtx &ctx = glob_ctx;
   create_op_ctx(&ctx, key, key_size, NULL, 0, GET);
   kv_get_read_index(&ctx);
   match_fp_and_find_empty(&ctx);
@@ -2514,7 +2550,9 @@ int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
   if (kv_get_locally(key, key_size, val, val_size) == 0)
     return 0;
   else if (kv_get_1s(key, key_size, val, val_size) == 0) {
-    local_cache.set(key, key_size, val, *val_size);
+    local_cache.set(key, key_size, val, *val_size,
+                    *(const Slot *)glob_ctx.target_slot_laddr,
+                    glob_ctx.target_slot_raddr);
     return 0;
   } else
     return -1;
