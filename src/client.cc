@@ -249,6 +249,7 @@ void DMCClient::clear_counters() {
   expert_reward_cnt_.resize(MAX_NUM_EXPERTS);
 #endif
   local_cache.clear_counters();
+  gtv_l.clear(), gtv_l_success.clear(), gtv_R.clear(), gtv_R_success.clear();
 }
 
 void DMCClient::get_init_bucket_raddr(uint64_t hash, __OUT uint64_t *r_addr,
@@ -1298,6 +1299,7 @@ bool DMCClient::update_priority_local_cache(const Slot &slot,
   // read remote slot
   Slot *rslot = (Slot *)local_buf_;
   memset(rslot, 0, sizeof(Slot));
+  // printd(L_INFO, "reading 0x%lx", slot_raddr);
   nm_->rdma_read_sid_sync(0, slot_raddr, rkey, (uint64_t)rslot, lkey,
                           sizeof(Slot));
 
@@ -2547,42 +2549,44 @@ int DMCClient::kv_set_2s(void *key, uint32_t key_size, void *val,
 
 int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
                       __OUT uint32_t *val_size) {
-  if (kv_get_locally(key, key_size, val, val_size) == 0)
+  // if (kv_get_locally(key, key_size, val, val_size) == 0)
+  //   return 0;
+  // else if (kv_get_1s(key, key_size, val, val_size) == 0) {
+  //   local_cache.set(key, key_size, val, *val_size,
+  //                   *(const Slot *)glob_ctx.target_slot_laddr,
+  //                   glob_ctx.target_slot_raddr);
+  //   return 0;
+  // } else
+  //   return -1;
+  int res;
+  struct timeval start, end;
+  uint64_t during;
+
+  // fetch locally
+  gettimeofday(&start, nullptr);
+  res = kv_get_locally(key, key_size, val, val_size);
+  gettimeofday(&end, nullptr);
+  during = diff_ts_us(&end, &start);
+  gtv_l.push_back(during);
+  if (res == 0) {
+    gtv_l_success.push_back(during);
     return 0;
-  else if (kv_get_1s(key, key_size, val, val_size) == 0) {
+  }
+
+  // fetch from MN
+  gettimeofday(&start, nullptr);
+  res = kv_get_1s(key, key_size, val, val_size);
+  gettimeofday(&end, nullptr);
+  during = diff_ts_us(&end, &start);
+  gtv_R.push_back(during);
+  if (res == 0) {
+    gtv_R_success.push_back(during);
     local_cache.set(key, key_size, val, *val_size,
                     *(const Slot *)glob_ctx.target_slot_laddr,
                     glob_ctx.target_slot_raddr);
     return 0;
-  } else
-    return -1;
-  /*   int res;
-    struct timeval start, end;
-    uint64_t during;
-
-    // fetch locally
-    gettimeofday(&start, nullptr);
-    res = kv_get_locally(key, key_size, val, val_size);
-    gettimeofday(&end, nullptr);
-    during = diff_ts_us(&end, &start);
-    gtv_l.push_back(during);
-    if (res == 0) {
-      gtv_l_success.push_back(during);
-      return 0;
-    }
-
-    // fetch from MN
-    gettimeofday(&start, nullptr);
-    res = kv_get_1s(key, key_size, val, val_size);
-    gettimeofday(&end, nullptr);
-    during = diff_ts_us(&end, &start);
-    gtv_R.push_back(during);
-    if (res == 0) {
-      gtv_R_success.push_back(during);
-      local_cache.set(key, key_size, val, *val_size);
-      return 0;
-    }
-    return -1; */
+  }
+  return -1;
 }
 
 int DMCClient::kv_p_set(void *key, uint32_t key_size, void *val,
