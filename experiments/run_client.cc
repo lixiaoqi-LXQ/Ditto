@@ -14,6 +14,8 @@ using json = nlohmann::json;
 // #define ELA_SCALE_RUN_TIME 487 // ycsbc
 #define ELA_SCALE_RUN_TIME 488  // ycsbc-new
 
+extern bool lcache_log_on;
+
 static bool is_real_workload(const char* workload_name) {
   return memcmp(workload_name, "twitter", strlen("twitter")) == 0 ||
          memcmp(workload_name, "wiki", strlen("wiki")) == 0 ||
@@ -1323,9 +1325,10 @@ void* client_ycsb(void* _args) {
   con_client.memcached_put_result((void*)load_res_str.c_str(),
                                   strlen(load_res_str.c_str()), args->cid);
 
+  // lcache_log_on = true;
   // sync to do warmup
-  lat_map.clear();
   printd(L_INFO, "client %d waiting sync (before warmup)", args->cid);
+  lat_map.clear();
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
   if (args->is_load_only) {
@@ -1333,11 +1336,11 @@ void* client_ycsb(void* _args) {
     return NULL;  // return loader thread
   }
 
-  // warmup
+  // warmup for client cache
   gettimeofday(&st, NULL);
-  // for (uint32_t seq = 0; true; seq = (seq + 1) % trans_wl.num_ops) {
-  while (true) {
-    uint32_t idx = (uint32_t)random() % trans_wl.num_ops;
+  uint32_t warmup_seq = 0;
+  while (client->get_lcoal_cache_limit() != 0) {
+    uint32_t idx = warmup_seq++ % trans_wl.num_ops;
     uint64_t key_addr, val_addr;
     uint32_t key_size, val_size;
     uint8_t op;
@@ -1349,7 +1352,7 @@ void* client_ycsb(void* _args) {
       client->kv_set((void*)key_addr, key_size, (void*)val_addr, val_size);
     }
     gettimeofday(&tet, nullptr);
-    if (diff_ts_us(&tet, &st) > 40 * 1000000 or client->is_local_cache_full()) {
+    if (diff_ts_us(&tet, &st) > 5 * 1000000) {
       break;
     }
   }
@@ -1358,10 +1361,11 @@ void* client_ycsb(void* _args) {
 
   // sync to do trans
   printd(L_INFO, "client %d waiting sync (before trans)", args->cid);
+  lat_map.clear();
   client->clear_counters();
   con_client.memcached_sync_ready(args->cid);
   gettimeofday(&st, NULL);
-  uint32_t seq = 0;
+  uint32_t seq = warmup_seq;
   uint32_t n_get = 0;
   uint32_t n_set = 0;
   while (true) {
@@ -1394,8 +1398,23 @@ void* client_ycsb(void* _args) {
   auto& cnters = client->get_counters_local();
   double hit_rate = (double)cnters.num_hit / cnters.num_get;
 
+  // latency info
+  auto get_avg = [](const std::vector<uint64_t>& vec) {
+    if (vec.size() == 0) return 0.;
+    return std::accumulate(vec.begin(), vec.end(), 0.) / vec.size();
+  };
+  auto gt_l = get_avg(client->gtv_l);
+  auto gt_R = get_avg(client->gtv_R);
+  auto gt_l_success = get_avg(client->gtv_l_success);
+  auto gt_R_success = get_avg(client->gtv_R_success);
+  json lat_res;
+  lat_res["get_local"] = gt_l;
+  lat_res["get_RDMA"] = gt_R;
+  lat_res["get_local_success"] = gt_l_success;
+  lat_res["get_RDMA_success"] = gt_R_success;
+
   json trans_res;
-  trans_res["ops"] = seq;
+  trans_res["ops"] = seq - warmup_seq;
   trans_res["n_get"] = n_get;
   trans_res["n_set"] = n_set;
   trans_res["n_retry"] = client->num_set_retry_;
@@ -1404,6 +1423,7 @@ void* client_ycsb(void* _args) {
   trans_res["lat_map"] = json(lat_map);
   trans_res["warmup_up_time"] = warmup_time;
   trans_res["local_cache_num_before_trans"] = lcache_count;
+  trans_res["get_latency"] = lat_res;
 
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),

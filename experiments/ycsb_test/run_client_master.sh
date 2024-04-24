@@ -16,6 +16,7 @@ st_server_id=$2
 workload=$3
 num_threads=$4
 num_all_clients=$5
+run_time=$6
 
 # memcached_ip="10.10.1.1"
 
@@ -28,4 +29,4 @@ num_all_clients=$5
     -i $st_server_id\
     -t $num_threads\
     -A $num_all_clients\
-    -T 20
+    -T $run_time

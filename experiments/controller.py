@@ -477,7 +477,7 @@ def control_ycsb_bench_fiber(
     return res_dict
 
 
-def control_ycsb_bench(controller: DMCMemcachedController, num_clients):
+def control_ycsb_bench(controller: DMCMemcachedController, num_clients, run_time):
     n_clients = max(num_clients, NUM_YCSB_LOADERS)
     res_dict = {}
     # sync load
@@ -516,11 +516,12 @@ def control_ycsb_bench(controller: DMCMemcachedController, num_clients):
         "hit-rate-local": np.average(hitrates),
         "warmup-up-time": np.average(warmup_times),
         "local-cache-num(before trans)": np.average(lcache_nums),
-        "tpt": ops / 20,
+        "tpt": ops / run_time,
         "p50": lat_list[int(len(lat_list) * 0.5)],
         "p90": lat_list[int(len(lat_list) * 0.9)],
         "p99": lat_list[int(len(lat_list) * 0.99)],
         "p999": lat_list[int(len(lat_list) * 0.999)],
+        "get-latency": res_dict["trans"][cid]["get_latency"],
     }
     print(json.dumps(json_res))
     return res_dict
@@ -847,6 +848,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--out_fname", type=str, default="{}".format(time.time()))
     parser.add_argument("-E", "--elastic", choices=["cpu", "mem"])
     parser.add_argument("-f", "--fiber", type=int, default=0)
+    parser.add_argument("-T", "--time", type=int, default=20)
 
     args = parser.parse_args()
 
@@ -888,7 +890,7 @@ if __name__ == "__main__":
             if args.fiber:
                 res = control_ycsb_bench_fiber(controller, args.num_clients, args.fiber)
             else:
-                res = control_ycsb_bench(controller, args.num_clients)
+                res = control_ycsb_bench(controller, args.num_clients, args.time)
 
     # stop the server and get server results
     server_res = stop_and_get_server_stats(controller)

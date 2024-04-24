@@ -12,14 +12,91 @@ if not os.path.exists("figs"):
     os.mkdir("figs")
 
 
-def plot_cache_size_matrices(res: dict):
+def plot_compare_LRU_and_DUMB(res_LRU: dict, res_DUMB: dict, res_RDMA: dict):
+    LRU, DUMB = 0, 1
+    workload_size = 10**7
+    assert res_LRU.keys() == res_DUMB.keys()
+    cache_sizes = []
+    hitrates, cache_ratios, tpts = [[[], []] for _ in range(3)]
+    p50s, p90s, p99s, p999s = [[[], []] for _ in range(4)]
+    for csize in res_LRU:
+        cache_sizes.append(int(csize) * 100 // workload_size)
+        p50s[LRU].append(res_LRU[csize]["p50"])
+        p90s[LRU].append(res_LRU[csize]["p90"])
+        p99s[LRU].append(res_LRU[csize]["p99"])
+        p999s[LRU].append(res_LRU[csize]["p999"])
+        p50s[DUMB].append(res_DUMB[csize]["p50"])
+        p90s[DUMB].append(res_DUMB[csize]["p90"])
+        p99s[DUMB].append(res_DUMB[csize]["p99"])
+        p999s[DUMB].append(res_DUMB[csize]["p999"])
+        hitrates[LRU].append(res_LRU[csize]["hit-rate-local"])
+        hitrates[DUMB].append(res_DUMB[csize]["hit-rate-local"])
+        tpts[LRU].append(res_LRU[csize]["tpt"] / 10**3)
+        tpts[DUMB].append(res_DUMB[csize]["tpt"] / 10**3)
+        # cache_num_key = "local-cache-num(before trans)"
+        # if cache_num_key in cache_res[csize]:
+        #     cached_num = cache_res[csize][cache_num_key]
+        #     cache_ratios.append(cached_num / workload_size)
+    # latency
+    _, ax_lat = plt.subplots()
+    for lat_data, name in [
+        (p50s, "p50"),
+        (p90s, "p90"),
+        (p99s, "p99"),
+        (p999s, "p999"),
+    ]:
+        ax_lat.plot(cache_sizes, lat_data[LRU], label="LRU {}".format(name))
+        ax_lat.plot(
+            cache_sizes, lat_data[DUMB], linestyle="--", label="DUMB {}".format(name)
+        )
+
+    ax_lat.set_xlabel("Cache size (% workload)", fontsize=16)
+    ax_lat.set_ylabel("Latency (us)", fontsize=16)
+    # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    ax_lat.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
+    # ax_tpt.set_ylim(bottom=0)
+    ax_lat.grid()
+    ax_lat.legend(ncol=2)
+    plt.savefig(f"figs/latency-LRU&DUMB.png")
+
+    # tpt
+    _, ax_tpt = plt.subplots()
+    ax_tpt.plot(cache_sizes, tpts[LRU], "b-", label="LRU")
+    ax_tpt.plot(cache_sizes, tpts[DUMB], "g--", label="DUMB")
+    ax_tpt.axhline(res_RDMA["tpt"] / 10**3, color="r", linestyle=":", label="RDMA")
+    ax_tpt.set_xlabel("Cache size (% workload)", fontsize=16)
+    ax_tpt.set_ylabel("Throughput (Kops/s)", fontsize=16)
+    # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    ax_tpt.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
+    ax_tpt.set_ylim(bottom=0)
+    ax_tpt.grid()
+    ax_tpt.legend()
+    plt.savefig(f"figs/tpt-LRU&DUMB.png")
+
+    # hit rate
+    _, ax_hit_rate = plt.subplots()
+    ax_hit_rate.plot(cache_sizes, hitrates[LRU], "b-", label="LRU")
+    ax_hit_rate.plot(cache_sizes, hitrates[DUMB], "g--", label="DUMB")
+    ax_hit_rate.set_xlabel("Cache size (% workload)")
+    ax_hit_rate.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
+    ax_hit_rate.set_ylabel("Hit Rate")
+    # ax_LRU.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    ax_hit_rate.grid()
+    ax_hit_rate.legend()
+    plt.savefig(f"figs/hit-rate-LRU&DUMB.png")
+
+
+def plot_cache_size_matrices(res: dict, topic: str):
     workload_size = 10**7
     RDMA_res, cache_res = res["RDMA"], res["cache"]
-    p50s, p99s, hitrates, cache_ratios, tpts, cache_sizes = [[] for _ in range(6)]
+    hitrates, cache_ratios, tpts, cache_sizes = [[] for _ in range(4)]
+    p50s, p90s, p99s, p999s = [[] for _ in range(4)]
     for csize in cache_res:
         cache_sizes.append(int(csize) * 100 // workload_size)
         p50s.append(cache_res[csize]["p50"])
+        p90s.append(cache_res[csize]["p90"])
         p99s.append(cache_res[csize]["p99"])
+        p999s.append(cache_res[csize]["p999"])
         hitrates.append(cache_res[csize]["hit-rate-local"])
         tpts.append(cache_res[csize]["tpt"] / 10**3)
         cache_num_key = "local-cache-num(before trans)"
@@ -38,25 +115,27 @@ def plot_cache_size_matrices(res: dict):
     ax_tpt.set_ylim(bottom=0)
     ax_tpt.grid()
     ax_tpt.legend(["Ditto+", "Ditto"])
-    plt.savefig("figs/tpt-warmup-2full.png")
+    plt.savefig(f"figs/tpt-{topic}.png")
 
     # p99
     _, ax_lat = plt.subplots()
-    ax_lat.plot(cache_sizes, p99s, marker=".", color="#1976D2", label="p99 Ditto+")
-    ax_lat.plot(cache_sizes, p50s, marker="*", color="#0097A7", label="p50 Ditto+")
+    ax_lat.plot(cache_sizes, p50s, "*--", color="#0097A7", label="p50 Ditto+")
+    ax_lat.plot(cache_sizes, p90s, ".-", color="#0097A7", label="p90 Ditto+")
+    ax_lat.plot(cache_sizes, p99s, ".--", color="#1976D2", label="p99 Ditto+")
+    ax_lat.plot(cache_sizes, p999s, ".-", color="#1976D2", label="p999 Ditto+")
     ax_lat.axhline(RDMA_res["p99"], linestyle="--", color="#F44336", label="p99 Ditto")
     ax_lat.axhline(RDMA_res["p50"], linestyle="-.", color="#E57373", label="p50 Ditto")
     ax_lat.set_xlabel("Cache size (% workload)", fontsize=16)
     ax_lat.set_ylabel("Lantency (us)", fontsize=16)
-    ax_lat.set_xticks(ticks=[10, 50, 100, 150, 200])
+    ax_lat.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
     ax_lat.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     ax_lat.grid()
-    ax_lat.legend(ncol=2)
-    plt.savefig("figs/latency-warmup-2full.png")
+    ax_lat.legend(ncol=3)
+    plt.savefig(f"figs/latency-{topic}.png")
 
     # hit rate
     _, ax_hitrate = plt.subplots()
-    line, = ax_hitrate.plot(cache_sizes, hitrates, ".-", label="hit-rate")
+    (line,) = ax_hitrate.plot(cache_sizes, hitrates, ".-", label="hit-rate")
     ax_hitrate.set_xlabel("Cache size (% workload)", fontsize=16)
     ax_hitrate.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     ax_hitrate.set_ylabel("Hit Rate", fontsize=16)
@@ -76,7 +155,7 @@ def plot_cache_size_matrices(res: dict):
         ax_cacheratio.set_ylabel("Cache Ratio", fontsize=16)
         ax_cacheratio.set_yticks(ticks=[0.0, 0.1, 0.2, 0.3, 0.5, 1])
         ax_cacheratio.legend(loc="center right", handles=[line, fill])
-    plt.savefig("figs/hit-rate-warmup-2full.png")
+    plt.savefig(f"figs/hit-rate-{topic}.png")
 
 
 def plot_fig1(res: dict):
