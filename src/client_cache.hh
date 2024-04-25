@@ -13,9 +13,9 @@
 
 // #define ValBufLen (64)
 // #define CLIENT_CACHE_LIMIT (10000)
-// #define USE_CLIENT_CACHE
+#define USE_CLIENT_CACHE
 #define META_UPDATE_ON
-static const bool use_lru_evict = false;
+static const bool use_lru_evict = true;
 
 class KVBlock {
  public:
@@ -110,6 +110,8 @@ class ClientCache {
   uint32_t get(const void *key, uint32_t key_len, __OUT void *val);
   void set(const void *key, uint32_t key_len, const void *val, uint32_t val_len,
            const Slot &lslot, uint64_t slot_raddr);
+  void insert(const void *key, uint32_t key_len, const void *val,
+              uint32_t val_len, const Slot &lslot, uint64_t slot_raddr);
 
  private:
   // evcit

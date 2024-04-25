@@ -109,12 +109,20 @@ void ClientCache::evict() {
   hash_map.erase(iter);
 }
 
+void ClientCache::insert(const void *key, uint32_t key_len, const void *val,
+                         uint32_t val_len, const Slot &lslot,
+                         uint64_t slot_raddr) {
+  std::string key_str(static_cast<const char *>(key), key_len);
+  std::string val_str(static_cast<const char *>(val), val_len);
+  assert(key_str.length() == key_len and val_str.length() == val_len);
+  insert(key_str, val_str, lslot, slot_raddr);
+}
+
 void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
                          const Slot &lslot, uint64_t slot_raddr) {
   if (CLIENT_CACHE_LIMIT == 0) return;
   assert(hash_map.size() <= CLIENT_CACHE_LIMIT);
   if (hash_map.size() == CLIENT_CACHE_LIMIT) evict();
-  // auto new_block = make_shared<KVBlock>(val_len, val, lslot, slot_raddr);
   auto new_block = make_shared<KVBlock>(key, val, slot_raddr, lslot);
   lru_set_node_to_head(new_block);
   hash_map.insert({key, new_block});

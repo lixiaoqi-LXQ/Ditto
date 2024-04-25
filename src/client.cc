@@ -2552,7 +2552,7 @@ int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
   // if (kv_get_locally(key, key_size, val, val_size) == 0)
   //   return 0;
   // else if (kv_get_1s(key, key_size, val, val_size) == 0) {
-  //   local_cache.set(key, key_size, val, *val_size,
+  //   local_cache.insert(key, key_size, val, *val_size,
   //                   *(const Slot *)glob_ctx.target_slot_laddr,
   //                   glob_ctx.target_slot_raddr);
   //   return 0;
@@ -2581,9 +2581,9 @@ int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
   gtv_R.push_back(during);
   if (res == 0) {
     gtv_R_success.push_back(during);
-    local_cache.set(key, key_size, val, *val_size,
-                    *(const Slot *)glob_ctx.target_slot_laddr,
-                    glob_ctx.target_slot_raddr);
+    local_cache.insert(key, key_size, val, *val_size,
+                       *(const Slot *)glob_ctx.target_slot_laddr,
+                       glob_ctx.target_slot_raddr);
     return 0;
   }
   return -1;
