@@ -27,10 +27,21 @@ void KVBlock::update_slot(Priority *prio) {
 }
 
 ClientCache::ClientCache() {
-  lru_head = make_shared<KVBlock>();
-  lru_tail = make_shared<KVBlock>();
-  lru_head->set_ptr(nullptr, lru_tail);
-  lru_tail->set_ptr(lru_head, nullptr);
+  switch (EVICTION_USED) {
+    case LRU:
+      lru_head = make_shared<KVBlock>();
+      lru_tail = make_shared<KVBlock>();
+      lru_head->set_ptr(nullptr, lru_tail);
+      lru_tail->set_ptr(lru_head, nullptr);
+      break;
+    case DUMB_SIMPLE:
+      break;  // nothing to do
+    case DUMB_RANDOM:
+      keys_inside.reserve(CLIENT_CACHE_LIMIT);
+      break;
+    default:
+      abort();
+  }
 }
 
 uint32_t ClientCache::get(const void *key, uint32_t key_len,
@@ -52,7 +63,16 @@ uint32_t ClientCache::get(const void *key, uint32_t key_len,
   // update infomation
   cnter.num_hit++;
   it->second->update_slot();
-  lru_set_node_to_head(it->second);
+  switch (EVICTION_USED) {
+    case LRU:
+      lru_set_node_to_head(it->second);
+      break;
+    case DUMB_SIMPLE:
+    case DUMB_RANDOM:
+      break;  // nothing to do
+    default:
+      abort();
+  }
   // log
   lcache_log("get %s hit, freq %u now", key_str.c_str(),
              it->second->get_slot().meta.acc_info.freq);
@@ -79,7 +99,16 @@ void ClientCache::set(const void *key, uint32_t key_len, const void *val,
     cnter.num_hit++;
     it->second->update_val(val_str);
     it->second->update_slot();
-    lru_set_node_to_head(it->second);
+    switch (EVICTION_USED) {
+      case LRU:
+        lru_set_node_to_head(it->second);
+        break;
+      case DUMB_SIMPLE:
+      case DUMB_RANDOM:
+        break;  // nothing to do
+      default:
+        abort();
+    }
     lcache_log("set %s hit, freq %u now", key_str.c_str(),
                it->second->get_slot().meta.acc_info.freq);
     return;
@@ -89,6 +118,25 @@ void ClientCache::set(const void *key, uint32_t key_len, const void *val,
     insert(key_str, val_str, lslot, slot_raddr);
   }
 #endif
+}
+
+ClientCache::NodePtr ClientCache::pick_evict() {
+  switch (EVICTION_USED) {
+    case LRU:
+      return lru_pop_tail_node();
+    case DUMB_SIMPLE:
+      return hash_map.begin()->second;
+    case DUMB_RANDOM: {
+      // true method for random evict
+      assert(keys_inside.size() == CLIENT_CACHE_LIMIT);
+      victim_idx = random() % keys_inside.size();
+      auto it = hash_map.find(keys_inside[victim_idx]);
+      assert(it != hash_map.end());
+      return it->second;
+    }
+    default:
+      abort();
+  }
 }
 
 void ClientCache::evict() {
@@ -122,15 +170,31 @@ void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
                          const Slot &lslot, uint64_t slot_raddr) {
   if (CLIENT_CACHE_LIMIT == 0) return;
   assert(hash_map.size() <= CLIENT_CACHE_LIMIT);
-  if (hash_map.size() == CLIENT_CACHE_LIMIT) evict();
+  bool should_evcit = hash_map.size() == CLIENT_CACHE_LIMIT;
+  if (should_evcit) evict();
+
   auto new_block = make_shared<KVBlock>(key, val, slot_raddr, lslot);
-  lru_set_node_to_head(new_block);
   hash_map.insert({key, new_block});
+  switch (EVICTION_USED) {
+    case LRU:
+      lru_set_node_to_head(new_block);
+      break;
+    case DUMB_SIMPLE:
+      break;
+    case DUMB_RANDOM: {
+      if (should_evcit)
+        keys_inside[victim_idx] = key;
+      else
+        keys_inside.push_back(key);
+      break;
+    }
+    default:
+      abort();
+  }
   lcache_log("insert %s", key.c_str());
 }
 
 void ClientCache::lru_set_node_to_head(NodePtr n) {
-  if (not use_lru_evict) return;
   if (n->prev() != nullptr and n->next() != nullptr) {
     n->prev()->set_next(n->next());
     n->next()->set_prev(n->prev());
@@ -144,7 +208,6 @@ void ClientCache::lru_set_node_to_head(NodePtr n) {
 }
 
 ClientCache::NodePtr ClientCache::lru_pop_tail_node() {
-  if (not use_lru_evict) return nullptr;
   auto tail = lru_tail->prev();
   assert(tail != lru_head);
   tail->prev()->set_next(lru_tail);

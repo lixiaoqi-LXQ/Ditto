@@ -4,6 +4,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_map>
 
@@ -11,11 +12,10 @@
 #include "dmc_utils.h"
 #include "priority.h"
 
-// #define ValBufLen (64)
-// #define CLIENT_CACHE_LIMIT (10000)
+// #define CLIENT_CACHE_LIMIT (10000) // now passed from outside
 #define USE_CLIENT_CACHE
 #define META_UPDATE_ON
-static const bool use_lru_evict = true;
+enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
 
 class KVBlock {
  public:
@@ -30,10 +30,6 @@ class KVBlock {
     NodePtr prev{nullptr};
     NodePtr next{nullptr};
   };
-  // using ValType = struct {
-  //   char data[ValBufLen]{};
-  //   uint32_t len{0};
-  // };
 
  private:
   // key/value
@@ -65,15 +61,6 @@ class KVBlock {
   void set_ptr(NodePtr p, NodePtr n) { link.prev = p, link.next = n; }
   void set_prev(NodePtr node) { link.prev = node; }
   void set_next(NodePtr node) { link.next = node; }
-
-  /* NOTE: deprecated functions
-  void copy_val_to(__OUT void *val) const { memcpy(val, _data, v_len); }
-  uint32_t get_val_len() const { return v_len; }
-  void update_val(uint32_t len, const void *data_src) {
-      string = (char *)assert(0 < len && len <= ValBufLen);
-      memcpy(_data, data_src, len);
-      v_len = len;
-  } */
 };
 
 struct CCCounter {
@@ -90,10 +77,19 @@ class ClientCache {
   using FuncUpdMeta = std::function<bool(const Slot &lslot, uint64_t raddr)>;
   using HashMap = std::unordered_map<std::string, NodePtr>;
 
-  NodePtr lru_head{nullptr}, lru_tail{nullptr};
+  /* core */
   HashMap hash_map{};
   CCCounter cnter{};
   FuncUpdMeta callback_update_rmeta_{nullptr};
+
+  /* eviction */
+  const CCEVICTION_OPTION EVICTION_USED{DUMB_RANDOM};
+  // LRU
+  NodePtr lru_head{nullptr}, lru_tail{nullptr};
+  // DUMB RANDOM
+  using KeyVec = std::vector<KVBlock::KeyType>;
+  size_t victim_idx;
+  KeyVec keys_inside;
 
  public:
   ClientCache();
@@ -116,9 +112,8 @@ class ClientCache {
  private:
   // evcit
   void evict();
-  NodePtr pick_evict() {
-    return use_lru_evict ? lru_pop_tail_node() : hash_map.begin()->second;
-  }
+  // pick a victim, and maintain eviction structures inside
+  NodePtr pick_evict();
 
   // insert
   void insert(KVBlock::KeyType key, KVBlock::ValType val, const Slot &lslot,
