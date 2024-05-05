@@ -1,5 +1,4 @@
 #include "workload.h"
-#include "client.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -9,10 +8,10 @@
 #include <string>
 #include <vector>
 
-static int load_ycsb_workload(char* workload_name,
-                              int num_load_ops,
-                              uint32_t server_id,
-                              uint32_t all_client_num,
+#include "client.h"
+
+static int load_ycsb_workload(char* workload_name, int num_load_ops,
+                              uint32_t server_id, uint32_t all_client_num,
                               __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/ycsb/%s", workload_name);
@@ -24,10 +23,8 @@ static int load_ycsb_workload(char* workload_name,
   char buf[2048];
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
-    if ((cnt % all_client_num) + 1 == server_id)
-      wl_list.emplace_back(buf);
+    if (buf[0] == '\n') continue;
+    if ((cnt % all_client_num) + 1 == server_id) wl_list.emplace_back(buf);
     cnt++;
   }
 
@@ -46,8 +43,8 @@ static int load_ycsb_workload(char* workload_name,
   char key_buf[64];
   for (int i = 0; i < wl->num_ops; i++) {
     sscanf(wl_list[i].c_str(), "%s %s", ops_buf, key_buf);
-    memcpy((void*)((uint64_t)wl->key_buf + i * 128), key_buf, 128);
-    memcpy((void*)((uint64_t)wl->val_buf + i * 120), &i, sizeof(int));
+    memcpy((void*)((uint64_t)wl->key_buf + (uint64_t)i * 128), key_buf, 128);
+    memcpy((void*)((uint64_t)wl->val_buf + (uint64_t)i * 120), &i, sizeof(int));
     wl->key_size_list[i] = strlen(key_buf);
     wl->val_size_list[i] = sizeof(int);
     if (strcmp("READ", ops_buf) == 0) {
@@ -59,10 +56,8 @@ static int load_ycsb_workload(char* workload_name,
   return 0;
 }
 
-static int load_wiki_workload(char* workload_name,
-                              int num_load_ops,
-                              uint32_t server_id,
-                              uint32_t all_client_num,
+static int load_wiki_workload(char* workload_name, int num_load_ops,
+                              uint32_t server_id, uint32_t all_client_num,
                               __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/wiki/%s", workload_name);
@@ -78,8 +73,7 @@ static int load_wiki_workload(char* workload_name,
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     if ((cnt % all_client_num) + 1 == server_id) {
       wl_list.emplace_back(buf);
     }
@@ -110,10 +104,8 @@ static int load_wiki_workload(char* workload_name,
   return 0;
 }
 
-static int load_cphy_workload(char* workload_name,
-                              int num_load_ops,
-                              uint32_t server_id,
-                              uint32_t all_client_num,
+static int load_cphy_workload(char* workload_name, int num_load_ops,
+                              uint32_t server_id, uint32_t all_client_num,
                               __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/cphy/%s", workload_name);
@@ -130,8 +122,7 @@ static int load_cphy_workload(char* workload_name,
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     if ((cnt % all_client_num) + 1 == server_id) {
       wl_list.emplace_back(buf);
     }
@@ -164,10 +155,8 @@ static int load_cphy_workload(char* workload_name,
   return 0;
 }
 
-static int load_ibm_workload(char* workload_name,
-                             int num_load_ops,
-                             uint32_t server_id,
-                             uint32_t all_client_num,
+static int load_ibm_workload(char* workload_name, int num_load_ops,
+                             uint32_t server_id, uint32_t all_client_num,
                              __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/ibm/%s", workload_name);
@@ -184,8 +173,7 @@ static int load_ibm_workload(char* workload_name,
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     if ((cnt % all_client_num) + 1 == server_id) {
       wl_list.emplace_back(buf);
     }
@@ -220,10 +208,8 @@ static int load_ibm_workload(char* workload_name,
   return 0;
 }
 
-static int load_fiu_workload(char* workload_name,
-                             int num_load_ops,
-                             uint32_t server_id,
-                             uint32_t all_client_num,
+static int load_fiu_workload(char* workload_name, int num_load_ops,
+                             uint32_t server_id, uint32_t all_client_num,
                              __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/fiu/%s", workload_name);
@@ -240,8 +226,7 @@ static int load_fiu_workload(char* workload_name,
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     if ((cnt % all_client_num) + 1 == server_id) {
       wl_list.emplace_back(buf);
     }
@@ -272,12 +257,9 @@ static int load_fiu_workload(char* workload_name,
   return 0;
 }
 
-static int load_mix_workload(char* workload_name,
-                             int num_load_ops,
-                             uint32_t server_id,
-                             uint32_t all_client_num,
-                             uint32_t n_lru_client,
-                             uint32_t n_lfu_client,
+static int load_mix_workload(char* workload_name, int num_load_ops,
+                             uint32_t server_id, uint32_t all_client_num,
+                             uint32_t n_lru_client, uint32_t n_lfu_client,
                              __OUT DMCWorkload* wl) {
   assert(all_client_num == 10);
   assert(n_lfu_client + n_lru_client == all_client_num);
@@ -304,8 +286,7 @@ static int load_mix_workload(char* workload_name,
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     if ((cnt % all_client_num) + 1 == tmp_id) {
       wl_list.emplace_back(buf);
     }
@@ -335,10 +316,8 @@ static int load_mix_workload(char* workload_name,
   return 0;
 }
 
-static int load_changing_workload(char* workload_name,
-                                  int num_load_ops,
-                                  uint32_t server_id,
-                                  uint32_t all_client_num,
+static int load_changing_workload(char* workload_name, int num_load_ops,
+                                  uint32_t server_id, uint32_t all_client_num,
                                   __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/changing/%s", workload_name);
@@ -354,8 +333,7 @@ static int load_changing_workload(char* workload_name,
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     if ((cnt % all_client_num) + 1 == server_id) {
       wl_list.emplace_back(buf);
     }
@@ -385,10 +363,8 @@ static int load_changing_workload(char* workload_name,
   return 0;
 }
 
-static int load_twitter_workload(char* workload_name,
-                                 int num_load_ops,
-                                 uint32_t server_id,
-                                 uint32_t all_client_num,
+static int load_twitter_workload(char* workload_name, int num_load_ops,
+                                 uint32_t server_id, uint32_t all_client_num,
                                  __OUT DMCWorkload* wl) {
   char wl_fname[128];
   sprintf(wl_fname, "../workloads/twitter/%s", workload_name);
@@ -406,8 +382,7 @@ static int load_twitter_workload(char* workload_name,
   char opbuf[64];
   int ttl;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     sscanf(buf, "%d %s %d %d %d %s %d", &ts, keybuf, &key_size, &val_size, &cid,
            opbuf, &ttl);
     if ((cid % all_client_num) + 1 != server_id) {
@@ -444,11 +419,8 @@ static int load_twitter_workload(char* workload_name,
   return 0;
 }
 
-int load_workload(char* workload_name,
-                  int num_load_ops,
-                  uint32_t server_id,
-                  uint32_t all_client_num,
-                  __OUT DMCWorkload* wl) {
+int load_workload(char* workload_name, int num_load_ops, uint32_t server_id,
+                  uint32_t all_client_num, __OUT DMCWorkload* wl) {
   if (memcmp(workload_name, "twitter", strlen("twitter")) == 0) {
     load_twitter_workload(workload_name, num_load_ops, server_id,
                           all_client_num, wl);
@@ -476,12 +448,9 @@ int load_workload(char* workload_name,
   return 0;
 }
 
-int load_workload_ycsb(char* workload_name,
-                       int num_load_ops,
-                       uint32_t server_id,
-                       uint32_t all_client_num,
-                       uint8_t evict_type,
-                       __OUT DMCWorkload* load_wl,
+int load_workload_ycsb(char* workload_name, int num_load_ops,
+                       uint32_t server_id, uint32_t all_client_num,
+                       uint8_t evict_type, __OUT DMCWorkload* load_wl,
                        __OUT DMCWorkload* trans_wl) {
   char fname_buf[256];
   sprintf(fname_buf, "%s.load", workload_name);
@@ -504,12 +473,9 @@ int load_workload_ycsb(char* workload_name,
   return 0;
 }
 
-int load_workload_hit_rate(char* workload_name,
-                           int num_load_ops,
-                           uint32_t server_id,
-                           uint32_t all_client_num,
-                           uint32_t n_lru_client,
-                           uint32_t n_lfu_client,
+int load_workload_hit_rate(char* workload_name, int num_load_ops,
+                           uint32_t server_id, uint32_t all_client_num,
+                           uint32_t n_lru_client, uint32_t n_lfu_client,
                            __OUT DMCWorkload* wl) {
   char real_workload_name[256];
   sscanf(workload_name, "hit-rate-%s", real_workload_name);
@@ -557,8 +523,7 @@ static int load_mix_individual_all(char* fname, __OUT DMCWorkload* wl) {
   int feature;
   uint32_t cnt = 0;
   while (fgets(buf, 2048, f) == buf) {
-    if (buf[0] == '\n')
-      continue;
+    if (buf[0] == '\n') continue;
     wl_list.emplace_back(buf);
     cnt++;
   }

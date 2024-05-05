@@ -16,3 +16,4 @@ scripts/install/*
 **/*.json
 **/*.txt
 **/*.png
+**/*.pdf

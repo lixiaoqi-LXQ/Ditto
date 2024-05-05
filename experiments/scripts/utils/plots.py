@@ -12,6 +12,84 @@ if not os.path.exists("figs"):
     os.mkdir("figs")
 
 
+def plot_compare_three(
+    res_LRU: dict, res_DUMB_R: dict, res_DUMB_S: dict, res_RDMA: dict
+):
+    LRU, DUMB_R, DUMB_S = 0, 1, 2
+    workload_size = 10**7
+    real_workload_size = workload_size
+    assert res_LRU.keys() == res_DUMB_R.keys()
+    cache_sizes = []
+    hitrates, tpts = [[[], [], []] for _ in range(2)]
+    p50s, p90s, p99s, p999s = [[[], [], []] for _ in range(4)]
+    for csize in res_LRU:
+        cache_sizes.append(int(csize) * 100 // real_workload_size)
+        for eviction, res in zip(
+            [LRU, DUMB_R, DUMB_S], [res_LRU, res_DUMB_R, res_DUMB_S]
+        ):
+            p50s[eviction].append(res[csize]["p50"])
+            p90s[eviction].append(res[csize]["p90"])
+            p99s[eviction].append(res[csize]["p99"])
+            p999s[eviction].append(res[csize]["p999"])
+            hitrates[eviction].append(res[csize]["hit-rate-local"])
+            tpts[eviction].append(res[csize]["tpt"] / 10**3)
+    # latency
+    _, ax_lat = plt.subplots()
+    for lat_data, name in [
+        # (p50s, "p50"),
+        (p90s, "p90"),
+        # (p99s, "p99"),
+        (p999s, "p999"),
+    ]:
+        ax_lat.plot(cache_sizes, lat_data[LRU], "b-", label="LRU {}".format(name))
+        ax_lat.plot(
+            cache_sizes,
+            lat_data[DUMB_S],
+            "g--",
+            label="DUMB-S {}".format(name),
+        )
+        ax_lat.plot(
+            cache_sizes,
+            lat_data[DUMB_R],
+            "k-.",
+            label="DUMB-R {}".format(name),
+        )
+
+    ax_lat.set_xlabel("Cache size (% workload)")
+    ax_lat.set_ylabel("Latency (us)")
+    ax_lat.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
+    ax_lat.grid()
+    ax_lat.legend(ncol=2)
+    plt.savefig(f"figs/latency-three-eviction.png")
+    # tpt
+    _, ax_tpt = plt.subplots()
+    ax_tpt.plot(cache_sizes, tpts[LRU], "b-", label="LRU")
+    ax_tpt.plot(cache_sizes, tpts[DUMB_S], "g--", label="DUMB-SIMPLE")
+    ax_tpt.plot(cache_sizes, tpts[DUMB_R], "k-.", label="DUMB-RANDOM")
+    ax_tpt.axhline(res_RDMA["tpt"] / 10**3, color="r", linestyle=":", label="RDMA")
+    ax_tpt.set_xlabel("Cache size (% workload)")
+    ax_tpt.set_ylabel("Throughput (Kops/s)")
+    # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    ax_tpt.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
+    ax_tpt.set_ylim(bottom=0)
+    ax_tpt.grid()
+    ax_tpt.legend()
+    plt.savefig(f"figs/tpt-three-eviction.png")
+
+    # hit rate
+    _, ax_hit_rate = plt.subplots()
+    ax_hit_rate.plot(cache_sizes, hitrates[LRU], "b-", label="LRU")
+    ax_hit_rate.plot(cache_sizes, hitrates[DUMB_S], "g--", label="DUMB-SIMPLE")
+    ax_hit_rate.plot(cache_sizes, hitrates[DUMB_R], "k-.", label="DUMB-RANDOM")
+    ax_hit_rate.set_xlabel("Cache size (% workload)")
+    ax_hit_rate.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
+    ax_hit_rate.set_ylabel("Hit Rate")
+    # ax_LRU.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    ax_hit_rate.grid()
+    ax_hit_rate.legend()
+    plt.savefig(f"figs/hit-rate-three-eviction.png")
+
+
 def plot_compare_LRU_and_DUMB(res_LRU: dict, res_DUMB: dict, res_RDMA: dict):
     LRU, DUMB = 0, 1
     workload_size = 10**7
@@ -50,8 +128,8 @@ def plot_compare_LRU_and_DUMB(res_LRU: dict, res_DUMB: dict, res_RDMA: dict):
             cache_sizes, lat_data[DUMB], linestyle="--", label="DUMB {}".format(name)
         )
 
-    ax_lat.set_xlabel("Cache size (% workload)", fontsize=16)
-    ax_lat.set_ylabel("Latency (us)", fontsize=16)
+    ax_lat.set_xlabel("Cache size (% workload)")
+    ax_lat.set_ylabel("Latency (us)")
     # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
     ax_lat.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     # ax_tpt.set_ylim(bottom=0)
@@ -64,8 +142,8 @@ def plot_compare_LRU_and_DUMB(res_LRU: dict, res_DUMB: dict, res_RDMA: dict):
     ax_tpt.plot(cache_sizes, tpts[LRU], "b-", label="LRU")
     ax_tpt.plot(cache_sizes, tpts[DUMB], "g--", label="DUMB")
     ax_tpt.axhline(res_RDMA["tpt"] / 10**3, color="r", linestyle=":", label="RDMA")
-    ax_tpt.set_xlabel("Cache size (% workload)", fontsize=16)
-    ax_tpt.set_ylabel("Throughput (Kops/s)", fontsize=16)
+    ax_tpt.set_xlabel("Cache size (% workload)")
+    ax_tpt.set_ylabel("Throughput (Kops/s)")
     # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
     ax_tpt.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     ax_tpt.set_ylim(bottom=0)
@@ -86,31 +164,30 @@ def plot_compare_LRU_and_DUMB(res_LRU: dict, res_DUMB: dict, res_RDMA: dict):
     plt.savefig(f"figs/hit-rate-LRU&DUMB.png")
 
 
-def plot_cache_size_matrices(res: dict, topic: str):
+def plot_cache_size_matrices(res_cache: dict, res_RDMA: dict, topic: str):
     workload_size = 10**7
-    RDMA_res, cache_res = res["RDMA"], res["cache"]
     hitrates, cache_ratios, tpts, cache_sizes = [[] for _ in range(4)]
     p50s, p90s, p99s, p999s = [[] for _ in range(4)]
-    for csize in cache_res:
+    for csize in res_cache:
         cache_sizes.append(int(csize) * 100 // workload_size)
-        p50s.append(cache_res[csize]["p50"])
-        p90s.append(cache_res[csize]["p90"])
-        p99s.append(cache_res[csize]["p99"])
-        p999s.append(cache_res[csize]["p999"])
-        hitrates.append(cache_res[csize]["hit-rate-local"])
-        tpts.append(cache_res[csize]["tpt"] / 10**3)
+        p50s.append(res_cache[csize]["p50"])
+        p90s.append(res_cache[csize]["p90"])
+        p99s.append(res_cache[csize]["p99"])
+        p999s.append(res_cache[csize]["p999"])
+        hitrates.append(res_cache[csize]["hit-rate-local"])
+        tpts.append(res_cache[csize]["tpt"] / 10**3)
         cache_num_key = "local-cache-num(before trans)"
-        if cache_num_key in cache_res[csize]:
-            cached_num = cache_res[csize][cache_num_key]
+        if cache_num_key in res_cache[csize]:
+            cached_num = res_cache[csize][cache_num_key]
             cache_ratios.append(cached_num / workload_size)
 
     # tpt
     _, ax_tpt = plt.subplots()
     ax_tpt.plot(cache_sizes, tpts, marker=".")
-    ax_tpt.axhline(RDMA_res["tpt"] / 10**3, linestyle="--", color="r")
+    ax_tpt.axhline(res_RDMA["tpt"] / 10**3, linestyle="--", color="r")
     ax_tpt.set_xlabel("Cache size (% workload)", fontsize=16)
     ax_tpt.set_ylabel("Throughput (Kops/s)", fontsize=16)
-    ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
     ax_tpt.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     ax_tpt.set_ylim(bottom=0)
     ax_tpt.grid()
@@ -123,8 +200,8 @@ def plot_cache_size_matrices(res: dict, topic: str):
     ax_lat.plot(cache_sizes, p90s, ".-", color="#0097A7", label="p90 Ditto+")
     ax_lat.plot(cache_sizes, p99s, ".--", color="#1976D2", label="p99 Ditto+")
     ax_lat.plot(cache_sizes, p999s, ".-", color="#1976D2", label="p999 Ditto+")
-    ax_lat.axhline(RDMA_res["p99"], linestyle="--", color="#F44336", label="p99 Ditto")
-    ax_lat.axhline(RDMA_res["p50"], linestyle="-.", color="#E57373", label="p50 Ditto")
+    ax_lat.axhline(res_RDMA["p99"], linestyle="--", color="#F44336", label="p99 Ditto")
+    ax_lat.axhline(res_RDMA["p50"], linestyle="-.", color="#E57373", label="p50 Ditto")
     ax_lat.set_xlabel("Cache size (% workload)", fontsize=16)
     ax_lat.set_ylabel("Lantency (us)", fontsize=16)
     ax_lat.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
@@ -139,7 +216,7 @@ def plot_cache_size_matrices(res: dict, topic: str):
     ax_hitrate.set_xlabel("Cache size (% workload)", fontsize=16)
     ax_hitrate.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     ax_hitrate.set_ylabel("Hit Rate", fontsize=16)
-    ax_hitrate.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
+    # ax_hitrate.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
     ax_hitrate.grid()
     if len(cache_ratios) != 0:
         ax_cacheratio = ax_hitrate.twinx()
@@ -706,24 +783,24 @@ def _subplot_fig15_16(res_dict, method_list, op, figName, show_label=False, ylim
             linewidth=1.5,
         )
     if op == "tpt":
-        ax.set_ylabel("Throughput (Kops/s)", fontsize=15)
+        ax.set_ylabel("Throughput (Kops/s)")
     else:
-        ax.set_ylabel("Hit Rate", fontsize=15)
+        ax.set_ylabel("Hit Rate")
     if ylim != None:
         ax.set_ylim(ylim)
-    ax.set_xlabel("Cache Size (% Trace Footprint)", fontsize=16)
+    ax.set_xlabel("Cache Size (% Trace Footprint)")
     ax.set_xticks([0, 1, 2, 3])
     ax.set_xticklabels(["1", "5", "10", "20"])
     ax.tick_params(labelsize=14)
     ax.grid(linewidth=0.3)
     if show_label:
         if op == "hr":
-            ax.set_ylim(0.3, 1.2)
+            # ax.set_ylim(0.3, 1.2)
             ax.set_yticks([0.4, 0.6, 0.8, 1.0])
         else:
-            ax.set_ylim(150, 510)
+            # ax.set_ylim(150, 510)
             ax.set_yticks([200, 300, 400])
-        ax.legend(fontsize=13, frameon=False, labelspacing=0.05, handletextpad=0.3)
+        ax.legend(frameon=False, labelspacing=0.05, handletextpad=0.3)
     if not os.path.exists("figs"):
         os.mkdir("figs")
     figName = "figs/" + figName + ".pdf"
@@ -732,17 +809,17 @@ def _subplot_fig15_16(res_dict, method_list, op, figName, show_label=False, ylim
 
 def plot_fig15_16(result: dict):
     workload_list = [
-        "webmail-all",
+        # "webmail-all",
         "twitter020-10m",
-        "twitter049-10m",
-        "twitter042-10m",
-        "ibm044-10m",
+        # "twitter049-10m",
+        # "twitter042-10m",
+        # "ibm044-10m",
     ]
     method_list = [
-        "cliquemap-precise-lru",
-        "cliquemap-precise-lfu",
-        "sample-lru",
-        "sample-lfu",
+        # "cliquemap-precise-lru",
+        # "cliquemap-precise-lfu",
+        # "sample-lru",
+        # "sample-lfu",
         "sample-adaptive",
     ]
     cache_size_list = ["0.01", "0.05", "0.1", "0.2"]

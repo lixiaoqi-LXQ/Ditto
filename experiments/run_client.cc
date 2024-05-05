@@ -1325,7 +1325,6 @@ void* client_ycsb(void* _args) {
   con_client.memcached_put_result((void*)load_res_str.c_str(),
                                   strlen(load_res_str.c_str()), args->cid);
 
-  // lcache_log_on = true;
   // sync to do warmup
   printd(L_INFO, "client %d waiting sync (before warmup)", args->cid);
   lat_map.clear();
@@ -1352,12 +1351,12 @@ void* client_ycsb(void* _args) {
       client->kv_set((void*)key_addr, key_size, (void*)val_addr, val_size);
     }
     gettimeofday(&tet, nullptr);
-    if (diff_ts_us(&tet, &st) > 5 * 1000000) {
+    if (diff_ts_us(&tet, &st) > 80 * 1000000) {
       break;
     }
   }
   auto warmup_time = (double)diff_ts_us(&tet, &st) / 1000;
-  auto lcache_count = client->get_local_cache_num();
+  auto lcache_count = client->local_cache.count();
 
   // sync to do trans
   printd(L_INFO, "client %d waiting sync (before trans)", args->cid);
@@ -1368,6 +1367,7 @@ void* client_ycsb(void* _args) {
   uint32_t seq = warmup_seq;
   uint32_t n_get = 0;
   uint32_t n_set = 0;
+  // lcache_log_on = true;
   while (true) {
     uint32_t idx = seq % trans_wl.num_ops;
     uint64_t key_addr, val_addr;
@@ -1395,7 +1395,7 @@ void* client_ycsb(void* _args) {
     }
   }
   printd(L_INFO, "Client %d finish\n", args->cid);
-  auto& cnters = client->get_counters_local();
+  auto& cnters = client->local_cache.get_counter();
   double hit_rate = (double)cnters.num_hit / cnters.num_get;
 
   // latency info
@@ -1403,15 +1403,25 @@ void* client_ycsb(void* _args) {
     if (vec.size() == 0) return 0.;
     return std::accumulate(vec.begin(), vec.end(), 0.) / vec.size();
   };
+  auto get_time_local = get_avg(client->local_cache.get_time_vec);
+  auto insert_time_local = get_avg(client->local_cache.insert_time_vec);
+  auto evict_time_local = get_avg(client->local_cache.evict_time_vec);
+  json local_cache_res;
+  local_cache_res["get_time_avg"] = get_time_local;
+  local_cache_res["insert_time_avg"] = insert_time_local;
+  local_cache_res["evict_time_avg"] = evict_time_local;
+
   auto gt_l = get_avg(client->gtv_l);
   auto gt_R = get_avg(client->gtv_R);
   auto gt_l_success = get_avg(client->gtv_l_success);
   auto gt_R_success = get_avg(client->gtv_R_success);
+
   json lat_res;
   lat_res["get_local"] = gt_l;
   lat_res["get_RDMA"] = gt_R;
   lat_res["get_local_success"] = gt_l_success;
   lat_res["get_RDMA_success"] = gt_R_success;
+  lat_res["local_time_record"] = local_cache_res;
 
   json trans_res;
   trans_res["ops"] = seq - warmup_seq;
@@ -2112,6 +2122,7 @@ void* client_workload_real(void* _args) {
     }
   }
   printd(L_INFO, "client %d warmup %d ops\n", args->cid, warmup_seq);
+  size_t lcache_num = client->local_cache.count();
 
   // sync for testing
   printd(L_INFO, "client %d waiting sync", args->cid);
@@ -2178,7 +2189,11 @@ void* client_workload_real(void* _args) {
     }
   }
 
+  auto& cnters = client->local_cache.get_counter();
+  double hit_rate = (double)cnters.num_hit / cnters.num_get;
   json res;
+  res["hit_rate_local"] = hit_rate;
+  res["local_cache_num_before_trans"] = lcache_num;
   res["n_ops_cont"] = json(ops_vec);
   res["n_evict_cont"] = json(num_evict_vec);
   res["n_succ_evict_cont"] = json(succ_evict_vec);

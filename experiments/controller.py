@@ -633,7 +633,7 @@ def control_workload_bench_ela_mem(controller: DMCMemcachedController):
     return combined_dict
 
 
-def control_workload_bench(controller: DMCMemcachedController):
+def control_workload_bench(controller: DMCMemcachedController, run_time):
     # sync warmup
     controller.sync_ready_clients()
 
@@ -649,12 +649,16 @@ def control_workload_bench(controller: DMCMemcachedController):
     )
     num_hist_match = []
     num_weight_adjust = []
-    for i in range(1, controller.num_clients + 1):
-        agg_ops += np.array(res_dict[i]["n_ops_cont"])
-        agg_miss += np.array(res_dict[i]["n_miss_cont"])
-        agg_weight += np.array(res_dict[i]["adaptive_weights_cont"])
-        num_hist_match.append(res_dict[i]["n_hist_match"])
-        num_weight_adjust.append(res_dict[i]["n_weights_adjust"])
+    hitrates, lcache_nums = [list() for _ in range(3)]
+    for cid in range(1, controller.num_clients + 1):
+        hitrates.append(res_dict[cid]["hit_rate_local"])
+        lcache_nums.append(res_dict[cid]["local_cache_num_before_trans"])
+
+        agg_ops += np.array(res_dict[cid]["n_ops_cont"])
+        agg_miss += np.array(res_dict[cid]["n_miss_cont"])
+        agg_weight += np.array(res_dict[cid]["adaptive_weights_cont"])
+        num_hist_match.append(res_dict[cid]["n_hist_match"])
+        num_weight_adjust.append(res_dict[cid]["n_weights_adjust"])
     sft_ops = np.array([0] + list(agg_ops)[:-1])
     sft_miss = np.array([0] + list(agg_miss)[:-1])
     tpt = (agg_ops - sft_ops) / 0.5
@@ -662,9 +666,11 @@ def control_workload_bench(controller: DMCMemcachedController):
     hr_coarse = 1 - (agg_miss / agg_ops)
     adaptive_weights = agg_weight / controller.num_clients
     combined_dict = {
+        "hit-rate-local": np.average(hitrates),
+        "local-cache-num(before trans)": np.average(lcache_nums),
         "tpt": list(tpt),
         "hr_overall": 1 - (agg_miss[-1] / agg_ops[-1]),
-        "tpt_overall": agg_ops[-1] / 20,
+        "tpt_overall": agg_ops[-1] / run_time,
         "hr_coarse": list(hr_coarse),
         "hr_fine": list(hr_fine),
         "adaptive_weights": adaptive_weights.tolist(),
@@ -868,7 +874,7 @@ if __name__ == "__main__":
         elif args.elastic == "mem":
             res = control_workload_bench_ela_mem(controller)
         else:
-            res = control_workload_bench(controller)
+            res = control_workload_bench(controller, args.time)
     elif args.workload == "evict-micro":
         res = control_evict_micro(controller)
     elif args.workload[:4] == "ycsb":

@@ -96,7 +96,7 @@ DMCClient::DMCClient(const DMCConfig *conf) {
 }
 
 DMCClient::~DMCClient() {
-  auto counter = local_cache.get_nums();
+  auto counter = local_cache.get_counter();
   printd(L_INFO, "local cache metadata-updates/evcits: %u/%u",
          counter.num_update, counter.num_evict);
   delete nm_;

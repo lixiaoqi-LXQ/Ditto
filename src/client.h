@@ -185,13 +185,14 @@ class DMCClient {
   // for debug
   FILE* log_f_;
 
+ public:
   // client-side cache
   ClientCache local_cache;
   KVOpsCtx glob_ctx;
 
  public:
   // get time vec
-  std::vector<uint64_t> gtv_l, gtv_R, gtv_l_success, gtv_R_success;
+  std::vector<uint64_t> gtv_l, gtv_R, gtv_l_success, gtv_R_success, itv_l;
 
  public:
   // counters
@@ -362,10 +363,10 @@ class DMCClient {
 
   inline void scale_memory() { server_oom_ = false; }
 
-  // client-side cache
-  const CCCounter& get_counters_local() const { return local_cache.get_nums(); }
-  bool is_local_cache_full() const { return local_cache.is_full(); }
-  size_t get_local_cache_num() const { return local_cache.count(); }
+  // // client-side cache
+  // const CCCounter& get_counters_local() const { return local_cache.get_counter(); }
+  // bool is_local_cache_full() const { return local_cache.is_full(); }
+  // size_t get_local_cache_num() const { return local_cache.count(); }
   size_t get_lcoal_cache_limit() const { return CLIENT_CACHE_LIMIT; }
 };
 

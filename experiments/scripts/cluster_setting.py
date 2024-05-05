@@ -6,7 +6,7 @@ client_ids = [i for i in range(2, 10)]
 
 default_fc_size = 10*1024*1024
 
-NUM_CLIENT_PER_NODE = 32
+NUM_CLIENT_PER_NODE = 64
 
 EXP_HOME = '~/Ditto'
 build_dir = f'{EXP_HOME}/build'
