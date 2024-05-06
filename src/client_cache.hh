@@ -14,7 +14,7 @@
 
 // #define CLIENT_CACHE_LIMIT (10000) // now passed from outside
 #define USE_CLIENT_CACHE
-#define META_UPDATE_ON
+// #define META_UPDATE_ON
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
 
 class KVBlock {
@@ -86,10 +86,6 @@ class ClientCache {
   const CCEVICTION_OPTION EVICTION_USED{DUMB_RANDOM};
   // LRU
   NodePtr lru_head{nullptr}, lru_tail{nullptr};
-  // DUMB RANDOM
-  using KeyVec = std::vector<KVBlock::KeyType>;
-  size_t victim_idx;
-  KeyVec keys_inside;
 
  public:
   ClientCache();
@@ -97,8 +93,8 @@ class ClientCache {
     callback_update_rmeta_ = call_back;
   }
   // counter functions
-  const CCCounter &get_nums() const { return cnter; }
-  void clear_counters() { memset(&cnter, 0, sizeof(cnter)); }
+  const CCCounter &get_counter() const { return cnter; }
+  void clear_counters() { clear_times(), memset(&cnter, 0, sizeof(cnter)); }
   bool is_full() const { return hash_map.size() == CLIENT_CACHE_LIMIT; }
   size_t count() const { return hash_map.size(); }
 
@@ -109,10 +105,19 @@ class ClientCache {
   void insert(const void *key, uint32_t key_len, const void *val,
               uint32_t val_len, const Slot &lslot, uint64_t slot_raddr);
 
+  // time measurement
+  struct timeval st, et;
+  std::vector<uint64_t> insert_time_vec, evict_time_vec, get_time_vec;
+  void clear_times() {
+    insert_time_vec.clear(), evict_time_vec.clear(), get_time_vec.clear();
+  }
+
  private:
   // evcit
+  void multi_evict(size_t n);
   void evict();
   // pick a victim, and maintain eviction structures inside
+  // TODO: return iterator instead
   NodePtr pick_evict();
 
   // insert

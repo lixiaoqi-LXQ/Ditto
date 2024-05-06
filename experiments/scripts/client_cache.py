@@ -59,7 +59,6 @@ def ycsb_run_1_pass(cache_size: int, build=True):
     MN_CPU_CMD = get_mn_cpu_cmd(config_dir, 1)
     cmd_manager.execute_once(MN_CPU_CMD)
 
-
     # start controller and MN
     print("start running...")
     controller_prom = cmd_manager.execute_on_node(
@@ -240,7 +239,7 @@ if __name__ == "__main__":
     else:
         size_step = int(1 * workload_size * 0.01)
         start = size_step
-        end = int(150 * workload_size * 0.01 + size_step)
+        end = int(100 * workload_size * 0.01 + size_step)
         print("ready to run {} iters", len(range(start, end, size_step)))
         for cache_size in range(start, end, size_step):
             json_res = ycsb_run_1_pass(cache_size)
