@@ -249,7 +249,6 @@ void DMCClient::clear_counters() {
   expert_reward_cnt_.resize(MAX_NUM_EXPERTS);
 #endif
   local_cache.clear_counters();
-  gtv_l.clear(), gtv_l_success.clear(), gtv_R.clear(), gtv_R_success.clear();
 }
 
 void DMCClient::get_init_bucket_raddr(uint64_t hash, __OUT uint64_t *r_addr,
@@ -2549,44 +2548,16 @@ int DMCClient::kv_set_2s(void *key, uint32_t key_size, void *val,
 
 int DMCClient::kv_get(void *key, uint32_t key_size, __OUT void *val,
                       __OUT uint32_t *val_size) {
-  // if (kv_get_locally(key, key_size, val, val_size) == 0)
-  //   return 0;
-  // else if (kv_get_1s(key, key_size, val, val_size) == 0) {
-  //   local_cache.insert(key, key_size, val, *val_size,
-  //                   *(const Slot *)glob_ctx.target_slot_laddr,
-  //                   glob_ctx.target_slot_raddr);
-  //   return 0;
-  // } else
-  //   return -1;
-  int res;
-  struct timeval start, end;
-  uint64_t during;
-
-  // fetch locally
-  gettimeofday(&start, nullptr);
-  res = kv_get_locally(key, key_size, val, val_size);
-  gettimeofday(&end, nullptr);
-  during = diff_ts_us(&end, &start);
-  gtv_l.push_back(during);
-  if (res == 0) {
-    gtv_l_success.push_back(during);
+  if (kv_get_locally(key, key_size, val, val_size) == 0) {
     return 0;
-  }
-
-  // fetch from MN
-  gettimeofday(&start, nullptr);
-  res = kv_get_1s(key, key_size, val, val_size);
-  gettimeofday(&end, nullptr);
-  during = diff_ts_us(&end, &start);
-  gtv_R.push_back(during);
-  if (res == 0) {
-    gtv_R_success.push_back(during);
+  } else if (kv_get_1s(key, key_size, val, val_size) == 0) {
     local_cache.insert(key, key_size, val, *val_size,
                        *(const Slot *)glob_ctx.target_slot_laddr,
                        glob_ctx.target_slot_raddr);
     return 0;
+  } else {
+    return -1;
   }
-  return -1;
 }
 
 int DMCClient::kv_p_set(void *key, uint32_t key_size, void *val,
@@ -2648,7 +2619,9 @@ int DMCClient::kv_set(void *key, uint32_t key_size, void *val,
     ret = kv_set_2s(key, key_size, val, val_size);
   } else {
     ret = kv_set_1s(key, key_size, val, val_size);
-    // local_cache.set(key, key_size, val, val_size);
+    // TODO: update local cache: a necessitiy
+    // - update value
+    // - update slot addr/remote block
   }
   n_set_miss_ += (ret < 0);
   return ret;

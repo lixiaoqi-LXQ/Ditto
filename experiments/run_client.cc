@@ -1399,29 +1399,14 @@ void* client_ycsb(void* _args) {
   double hit_rate = (double)cnters.num_hit / cnters.num_get;
 
   // latency info
-  auto get_avg = [](const std::vector<uint64_t>& vec) {
-    if (vec.size() == 0) return 0.;
-    return std::accumulate(vec.begin(), vec.end(), 0.) / vec.size();
-  };
-  auto get_time_local = get_avg(client->local_cache.get_time_vec);
-  auto insert_time_local = get_avg(client->local_cache.insert_time_vec);
-  auto evict_time_local = get_avg(client->local_cache.evict_time_vec);
+  auto get_time_local = client->local_cache.get_timer.get_avg();
+  auto insert_time_local = client->local_cache.insert_timer.get_avg();
+  auto evict_time_local = client->local_cache.evict_timer.get_avg();
   json local_cache_res;
+  local_cache_res["unit"] = "nanosecond";
   local_cache_res["get_time_avg"] = get_time_local;
   local_cache_res["insert_time_avg"] = insert_time_local;
   local_cache_res["evict_time_avg"] = evict_time_local;
-
-  auto gt_l = get_avg(client->gtv_l);
-  auto gt_R = get_avg(client->gtv_R);
-  auto gt_l_success = get_avg(client->gtv_l_success);
-  auto gt_R_success = get_avg(client->gtv_R_success);
-
-  json lat_res;
-  lat_res["get_local"] = gt_l;
-  lat_res["get_RDMA"] = gt_R;
-  lat_res["get_local_success"] = gt_l_success;
-  lat_res["get_RDMA_success"] = gt_R_success;
-  lat_res["local_time_record"] = local_cache_res;
 
   json trans_res;
   trans_res["ops"] = seq - warmup_seq;
@@ -1433,7 +1418,7 @@ void* client_ycsb(void* _args) {
   trans_res["lat_map"] = json(lat_map);
   trans_res["warmup_up_time"] = warmup_time;
   trans_res["local_cache_num_before_trans"] = lcache_count;
-  trans_res["get_latency"] = lat_res;
+  trans_res["get_latency"] = local_cache_res;
 
   std::string str = trans_res.dump();
   con_client.memcached_put_result((void*)str.c_str(), strlen(str.c_str()),

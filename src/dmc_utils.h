@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
+#include <chrono>
+#include <numeric>
+#include <vector>
+
 #define __OUT
 #define MSG_BUF_SIZE (2 * 1024ULL)
 #define MSG_BUF_NUM (1024)
@@ -236,5 +240,27 @@ int stick_this_thread_to_core(int core_id);
 
 void set_sys_start_ts(uint64_t ts);
 uint32_t new_ts32();
+
+struct Timer {
+  inline static const std::chrono::nanoseconds zero_ns{0};
+  std::chrono::steady_clock::time_point time_start, time_end;
+  std::vector<std::chrono::nanoseconds> vec;
+  const bool _use_vec;
+
+  Timer(bool use_vec = true) : _use_vec{use_vec} {}
+
+  inline void start() { time_start = std::chrono::steady_clock::now(); }
+  inline void stop() {
+    time_end = std::chrono::steady_clock::now();
+    if (_use_vec) vec.push_back(during());
+  }
+  inline std::chrono::nanoseconds during() { return time_end - time_start; }
+  inline size_t get_avg() {
+    if (vec.size() == 0) return 0ul;
+    auto avg = std::accumulate(vec.begin(), vec.end(), zero_ns) / vec.size();
+    return avg.count();
+  }
+  inline void clear() { vec.clear(); }
+};
 
 #endif

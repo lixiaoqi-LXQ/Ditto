@@ -14,8 +14,9 @@
 
 // #define CLIENT_CACHE_LIMIT (10000) // now passed from outside
 #define USE_CLIENT_CACHE
-// #define META_UPDATE_ON
+#define META_UPDATE_ON
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
+#define CCEVICTION DUMB_RANDOM
 
 class KVBlock {
  public:
@@ -83,7 +84,7 @@ class ClientCache {
   FuncUpdMeta callback_update_rmeta_{nullptr};
 
   /* eviction */
-  const CCEVICTION_OPTION EVICTION_USED{DUMB_RANDOM};
+  const CCEVICTION_OPTION EVICTION_USED{CCEVICTION};
   // LRU
   NodePtr lru_head{nullptr}, lru_tail{nullptr};
 
@@ -105,13 +106,6 @@ class ClientCache {
   void insert(const void *key, uint32_t key_len, const void *val,
               uint32_t val_len, const Slot &lslot, uint64_t slot_raddr);
 
-  // time measurement
-  struct timeval st, et;
-  std::vector<uint64_t> insert_time_vec, evict_time_vec, get_time_vec;
-  void clear_times() {
-    insert_time_vec.clear(), evict_time_vec.clear(), get_time_vec.clear();
-  }
-
  private:
   // evcit
   void multi_evict(size_t n);
@@ -129,4 +123,14 @@ class ClientCache {
   NodePtr lru_get_tail_node() { return lru_tail->prev(); }
   NodePtr lru_pop_tail_node();
   void lru_print(const char *action = "") const;
+
+ public:
+  // time measurement
+  Timer insert_timer, evict_timer, get_timer;
+  Timer any_timer{false};
+
+ private:
+  void clear_times() {
+    insert_timer.clear(), evict_timer.clear(), get_timer.clear();
+  }
 };

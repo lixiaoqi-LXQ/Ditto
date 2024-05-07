@@ -46,7 +46,7 @@ ClientCache::ClientCache() {
 
 uint32_t ClientCache::get(const void *key, uint32_t key_len,
                           __OUT void *val_out_buffer) {
-  gettimeofday(&st, NULL);
+  get_timer.start();
   cnter.num_get++;
 #ifndef USE_CLIENT_CACHE
   return 0;
@@ -58,8 +58,7 @@ uint32_t ClientCache::get(const void *key, uint32_t key_len,
   if (it == hash_map.end()) {
     lcache_log("get %s miss", key_str.c_str());
     cnter.num_miss++;
-    gettimeofday(&et, NULL);
-    get_time_vec.push_back(diff_ts_us(&et, &st));
+    get_timer.stop();
     return 0;
   }
 
@@ -82,8 +81,7 @@ uint32_t ClientCache::get(const void *key, uint32_t key_len,
   // do the job
   auto &val = it->second->get_val();
   memcpy(val_out_buffer, val.c_str(), val.length());
-  gettimeofday(&et, NULL);
-  get_time_vec.push_back(diff_ts_us(&et, &st));
+  get_timer.stop();
   return val.length();
 #endif
 }
@@ -126,7 +124,6 @@ void ClientCache::set(const void *key, uint32_t key_len, const void *val,
 }
 
 ClientCache::NodePtr ClientCache::pick_evict() {
-  gettimeofday(&st, NULL);
   ClientCache::NodePtr ret;
   switch (EVICTION_USED) {
     case LRU:
@@ -137,25 +134,37 @@ ClientCache::NodePtr ClientCache::pick_evict() {
       break;
     case DUMB_RANDOM: {
       // true method for random evict
+      any_timer.start();
       size_t victim_bucket;
+      int times = 0;
       do {
+        ++times;
         victim_bucket = random() % hash_map.bucket_count();
       } while (hash_map.bucket_size(victim_bucket) == 0);
       auto iter = hash_map.begin(victim_bucket);
+      any_timer.stop();
+      auto find_bucket_time = any_timer.during();
+
+      any_timer.start();
       size_t victim_idx = random() % hash_map.bucket_size(victim_bucket);
       iter = std::next(iter, victim_idx);
       ret = iter->second;
+      any_timer.stop();
+      auto walk_time = any_timer.during();
+      lcache_log(
+          "victim: bucket %lu idx %lu, find bucket: %lu ns (%d times), walk in "
+          "bucket: %lu ns",
+          victim_bucket, victim_idx, find_bucket_time, times, walk_time);
       break;
     }
     default:
       abort();
   }
-  gettimeofday(&et, NULL);
-  evict_time_vec.push_back(diff_ts_us(&et, &st));
   return ret;
 }
 
 void ClientCache::evict() {
+  evict_timer.start();
   cnter.num_evict++;
   auto evictim = pick_evict();
   auto iter = hash_map.find(evictim->get_key());
@@ -171,10 +180,11 @@ void ClientCache::evict() {
     cnter.num_update++;
   }
   hash_map.erase(iter);
+  evict_timer.stop();
 }
 
 void ClientCache::multi_evict(size_t n) {
-  gettimeofday(&st, NULL);
+  evict_timer.start();
 
   n = std::min(n, count());
   cnter.num_evict += n;
@@ -197,22 +207,25 @@ void ClientCache::multi_evict(size_t n) {
     hash_map.erase(iter);
   }
 
-  gettimeofday(&et, NULL);
-  evict_time_vec.push_back(diff_ts_us(&et, &st));
+  evict_timer.stop();
 }
 
 void ClientCache::insert(const void *key, uint32_t key_len, const void *val,
                          uint32_t val_len, const Slot &lslot,
                          uint64_t slot_raddr) {
+#ifndef USE_CLIENT_CACHE
+  return;
+#else
   std::string key_str(static_cast<const char *>(key), key_len);
   std::string val_str(static_cast<const char *>(val), val_len);
   assert(key_str.length() == key_len and val_str.length() == val_len);
   insert(key_str, val_str, lslot, slot_raddr);
+#endif
 }
 
 void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
                          const Slot &lslot, uint64_t slot_raddr) {
-  gettimeofday(&st, NULL);
+  insert_timer.start();
   if (CLIENT_CACHE_LIMIT == 0) return;
   assert(hash_map.size() <= CLIENT_CACHE_LIMIT);
   bool should_evcit = hash_map.size() == CLIENT_CACHE_LIMIT;
@@ -234,8 +247,7 @@ void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
       abort();
   }
   lcache_log("insert %s", key.c_str());
-  gettimeofday(&et, NULL);
-  insert_time_vec.push_back(diff_ts_us(&et, &st));
+  insert_timer.stop();
 }
 
 void ClientCache::lru_set_node_to_head(NodePtr n) {
