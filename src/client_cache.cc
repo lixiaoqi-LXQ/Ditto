@@ -30,13 +30,18 @@ void KVBlock::update_slot(Priority *prio) {
 }
 
 BlockPool::BlockPool() {
-  for (unsigned i = 0; i < CLIENT_CACHE_LIMIT; i++) free_list.push_back(i);
+  for (unsigned i = 0; i < CLIENT_CACHE_LIMIT; i++) {
+    blocks[i].set_invalid();
+    free_list.push_back(i);
+  }
 }
 
 NodePtr BlockPool::alloc() {
   unsigned i = *free_list.begin();
   free_list.pop_front();
   lcache_log("pool: alloc %u %p", i, &blocks[i]);
+  // FIXME: the validity is undefined
+  // blocks[i].set_valid();
   return &blocks[i];
 }
 
@@ -45,21 +50,31 @@ NodePtr BlockPool::construct(Args... args) {
   unsigned i = *free_list.begin();
   free_list.pop_front();
   blocks[i].reset(args...);
+  blocks[i].set_valid();
   lcache_log("pool: alloc %u %p", i, &blocks[i]);
   return &blocks[i];
 }
 
 void BlockPool::free(NodePtr ptr) {
   unsigned i = ptr - blocks;
+  blocks[i].set_invalid();
   free_list.push_front(i);
   lcache_log("pool: free %u %p %p", i, ptr, &blocks[i]);
+}
+
+NodePtr BlockPool::select_one_valid_randomly() {
+  unsigned idx;
+  do {
+    idx = random() % CLIENT_CACHE_LIMIT;
+  } while (not blocks[idx].is_valid());
+  return &blocks[idx];
 }
 
 ClientCache::ClientCache() {
   switch (EVICTION_USED) {
     case LRU:
-      lru_head = block_pool.alloc();
-      lru_tail = block_pool.alloc();
+      lru_head = new KVBlock();
+      lru_tail = new KVBlock();
       lru_head->set_ptr(nullptr, lru_tail);
       lru_tail->set_ptr(lru_head, nullptr);
       break;
@@ -73,7 +88,19 @@ ClientCache::ClientCache() {
   hash_map.reserve(CLIENT_CACHE_LIMIT);
 }
 
-ClientCache::~ClientCache() {}
+ClientCache::~ClientCache() {
+  switch (EVICTION_USED) {
+    case LRU:
+      delete lru_head;
+      delete lru_tail;
+      break;
+    case DUMB_SIMPLE:
+    case DUMB_RANDOM:
+      break;  // nothing to do
+    default:
+      abort();
+  }
+}
 
 uint32_t ClientCache::get(const void *key, uint32_t key_len,
                           __OUT void *val_out_buffer) {
@@ -165,27 +192,7 @@ NodePtr ClientCache::pick_evict() {
       break;
     case DUMB_RANDOM: {
       // true method for random evict
-      any_timer.start();
-      size_t victim_bucket;
-      int times = 0;
-      do {
-        ++times;
-        victim_bucket = random() % hash_map.bucket_count();
-      } while (hash_map.bucket_size(victim_bucket) == 0);
-      auto iter = hash_map.begin(victim_bucket);
-      any_timer.stop();
-      auto find_bucket_time = any_timer.during();
-
-      any_timer.start();
-      size_t victim_idx = random() % hash_map.bucket_size(victim_bucket);
-      iter = std::next(iter, victim_idx);
-      ret = iter->second;
-      any_timer.stop();
-      auto walk_time = any_timer.during();
-      lcache_log(
-          "victim: bucket %lu idx %lu, find bucket: %lu ns (%d times), walk in "
-          "bucket: %lu ns",
-          victim_bucket, victim_idx, find_bucket_time, times, walk_time);
+      ret = block_pool.select_one_valid_randomly();
       break;
     }
     default:

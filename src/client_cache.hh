@@ -22,7 +22,7 @@
 #define USE_CLIENT_CACHE
 #define META_UPDATE_ON
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
-#define CCEVICTION DUMB_SIMPLE
+#define CCEVICTION DUMB_RANDOM
 
 class KVBlock;
 using NodePtr = KVBlock *;
@@ -46,11 +46,17 @@ class KVBlock {
   MetaType meta{};
   // LRU list
   LRUAtrr link{};
+  // used for sample, set by pool
+  bool valid{false};
 
  public:
   KVBlock() { reserve_for_string(); }
   ~KVBlock() = default;
   KVBlock(const KVBlock &) = delete;
+
+  inline bool is_valid() const { return valid; }
+  inline void set_valid() { valid = true; }
+  inline void set_invalid() { valid = false; }
 
   template <typename... Args>
   KVBlock(Args... args) {
@@ -87,10 +93,14 @@ class BlockPool {
 
  public:
   BlockPool();
+
   NodePtr alloc();
   template <typename... Args>
   NodePtr construct(Args... args);
+
   void free(NodePtr ptr);
+
+  NodePtr select_one_valid_randomly();
 };
 
 struct CCCounter {
