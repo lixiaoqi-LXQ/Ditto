@@ -12,13 +12,14 @@ inline void lcache_log(const char *fmt, Args... arg) {
   printf(buf, arg...);
 }
 
-KVBlock::KVBlock(const KeyType &k, const ValType &v, const uint64_t &slot_raddr,
-                 const Slot &slot)
-    : key(k), val(v) {
+void KVBlock::reset(const KeyType &k, const ValType &v,
+                    const uint64_t &slot_raddr, const Slot &slot) {
+  key = k;
+  val = v;
   memcpy(&meta.slot, &slot, sizeof(Slot));
   memset(&meta.slot.meta.acc_info.acc_ts, 0, 3 * sizeof(uint64_t));
   meta.raddr = slot_raddr;
-};
+}
 
 void KVBlock::update_slot(Priority *prio) {
   meta.slot.meta.acc_info.acc_ts = new_ts();
@@ -28,11 +29,37 @@ void KVBlock::update_slot(Priority *prio) {
   }
 }
 
+BlockPool::BlockPool() {
+  for (unsigned i = 0; i < CLIENT_CACHE_LIMIT; i++) free_list.push_back(i);
+}
+
+NodePtr BlockPool::alloc() {
+  unsigned i = *free_list.begin();
+  free_list.pop_front();
+  lcache_log("pool: alloc %u %p", i, &blocks[i]);
+  return &blocks[i];
+}
+
+template <typename... Args>
+NodePtr BlockPool::construct(Args... args) {
+  unsigned i = *free_list.begin();
+  free_list.pop_front();
+  blocks[i].reset(args...);
+  lcache_log("pool: alloc %u %p", i, &blocks[i]);
+  return &blocks[i];
+}
+
+void BlockPool::free(NodePtr ptr) {
+  unsigned i = ptr - blocks;
+  free_list.push_front(i);
+  lcache_log("pool: free %u %p %p", i, ptr, &blocks[i]);
+}
+
 ClientCache::ClientCache() {
   switch (EVICTION_USED) {
     case LRU:
-      lru_head = make_shared<KVBlock>();
-      lru_tail = make_shared<KVBlock>();
+      lru_head = block_pool.alloc();
+      lru_tail = block_pool.alloc();
       lru_head->set_ptr(nullptr, lru_tail);
       lru_tail->set_ptr(lru_head, nullptr);
       break;
@@ -45,6 +72,8 @@ ClientCache::ClientCache() {
   }
   hash_map.reserve(CLIENT_CACHE_LIMIT);
 }
+
+ClientCache::~ClientCache() {}
 
 uint32_t ClientCache::get(const void *key, uint32_t key_len,
                           __OUT void *val_out_buffer) {
@@ -78,8 +107,8 @@ uint32_t ClientCache::get(const void *key, uint32_t key_len,
       abort();
   }
   // log
-  lcache_log("get %s hit, freq %u now", key_str.c_str(),
-             it->second->get_slot().meta.acc_info.freq);
+  lcache_log("get %s hit (block ptr %p), freq %u now", key_str.c_str(),
+             it->second, it->second->get_slot().meta.acc_info.freq);
   // do the job
   auto &val = it->second->get_val();
   memcpy(val_out_buffer, val.c_str(), val.length());
@@ -125,8 +154,8 @@ void ClientCache::set(const void *key, uint32_t key_len, const void *val,
 #endif
 }
 
-ClientCache::NodePtr ClientCache::pick_evict() {
-  ClientCache::NodePtr ret;
+NodePtr ClientCache::pick_evict() {
+  NodePtr ret;
   switch (EVICTION_USED) {
     case LRU:
       ret = lru_pop_tail_node();
@@ -168,12 +197,15 @@ ClientCache::NodePtr ClientCache::pick_evict() {
 void ClientCache::evict() {
   evict_timer.start();
   cnter.num_evict++;
-  auto evictim = pick_evict();
-  auto iter = hash_map.find(evictim->get_key());
+  auto victim = pick_evict();
+  lcache_log("evict %s (block ptr %p), access time %u",
+             victim->get_key().c_str(), victim,
+             victim->get_slot().meta.acc_info.freq);
+  auto iter = hash_map.find(victim->get_key());
   assert(iter != hash_map.end());
   NodePtr block_ptr = iter->second;
-  lcache_log("evict %s, access time %u", iter->first.c_str(),
-             block_ptr->get_slot().meta.acc_info.freq);
+  // lcache_log("evict %s, access time %u", iter->first.c_str(),
+  //            block_ptr->get_slot().meta.acc_info.freq);
   // only update for accessed data
   if (block_ptr->get_slot().meta.acc_info.freq != 0) {
 #ifdef META_UPDATE_ON
@@ -181,6 +213,7 @@ void ClientCache::evict() {
 #endif
     cnter.num_update++;
   }
+  block_pool.free(victim);
   hash_map.erase(iter);
   evict_timer.stop();
 }
@@ -225,8 +258,8 @@ void ClientCache::insert(const void *key, uint32_t key_len, const void *val,
 #endif
 }
 
-void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
-                         const Slot &lslot, uint64_t slot_raddr) {
+void ClientCache::insert(KeyType key, ValType val, const Slot &lslot,
+                         uint64_t slot_raddr) {
   insert_timer.start();
   if (CLIENT_CACHE_LIMIT == 0) return;
   assert(hash_map.size() <= CLIENT_CACHE_LIMIT);
@@ -234,7 +267,7 @@ void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
   if (should_evcit) evict();
   // multi_evict(CLIENT_CACHE_LIMIT * 0.01);
 
-  auto new_block = make_shared<KVBlock>(key, val, slot_raddr, lslot);
+  auto new_block = block_pool.construct(key, val, slot_raddr, lslot);
   hash_map.insert({key, new_block});
   switch (EVICTION_USED) {
     case LRU:
@@ -248,7 +281,7 @@ void ClientCache::insert(KVBlock::KeyType key, KVBlock::ValType val,
     default:
       abort();
   }
-  lcache_log("insert %s", key.c_str());
+  lcache_log("insert %s (block ptr: %p)", key.c_str(), new_block);
   insert_timer.stop();
 }
 
@@ -265,7 +298,7 @@ void ClientCache::lru_set_node_to_head(NodePtr n) {
   // lru_print("insert node to head");
 }
 
-ClientCache::NodePtr ClientCache::lru_pop_tail_node() {
+NodePtr ClientCache::lru_pop_tail_node() {
   auto tail = lru_tail->prev();
   assert(tail != lru_head);
   tail->prev()->set_next(lru_tail);
@@ -279,7 +312,8 @@ void ClientCache::lru_print(const char *action) const {
   printd(L_INFO, "print lru after %s", action);
   NodePtr node = lru_head;
   while (node != nullptr) {
-    printf("%p(%p, %p)->", node.get(), node->prev().get(), node->next().get());
+    // printf("%p(%p, %p)->", node.get(), node->prev().get(),
+    // node->next().get());
     node = node->next();
   }
   printf("|\n");

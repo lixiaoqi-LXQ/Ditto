@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstring>
 #include <functional>
+#include <list>
 #include <memory>
 #include <random>
 #include <string>
@@ -23,13 +24,12 @@
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
 #define CCEVICTION DUMB_SIMPLE
 
-class KVBlock {
- public:
-  using NodePtr = boost::shared_ptr<KVBlock>;
-  using KeyType = std::string;
-  using ValType = std::string;
+class KVBlock;
+using NodePtr = KVBlock *;
+using KeyType = std::string;
+using ValType = std::string;
 
- private:
+class KVBlock {
   using MetaType = struct {
     uint64_t raddr{0};
     Slot slot{};
@@ -39,7 +39,6 @@ class KVBlock {
     NodePtr next{nullptr};
   };
 
- private:
   // key/value
   KeyType key{};
   ValType val{};
@@ -49,10 +48,17 @@ class KVBlock {
   LRUAtrr link{};
 
  public:
-  KVBlock() = default;
+  KVBlock() { reserve_for_string(); }
+  ~KVBlock() = default;
   KVBlock(const KVBlock &) = delete;
-  KVBlock(const KeyType &k, const ValType &v, const uint64_t &slot_raddr,
-          const Slot &slot);
+
+  template <typename... Args>
+  KVBlock(Args... args) {
+    reserve_for_string();
+    reset(args...);
+  }
+  void reset(const KeyType &k, const ValType &v, const uint64_t &slot_raddr,
+             const Slot &slot);
 
   // functions for key value info
   const KeyType &get_key() const { return key; }
@@ -70,6 +76,21 @@ class KVBlock {
   void set_ptr(NodePtr p, NodePtr n) { link.prev = p, link.next = n; }
   void set_prev(NodePtr node) { link.prev = node; }
   void set_next(NodePtr node) { link.next = node; }
+
+ private:
+  void reserve_for_string() { key.reserve(32), val.reserve(32); }
+};
+
+class BlockPool {
+  KVBlock blocks[CLIENT_CACHE_LIMIT];
+  std::list<unsigned> free_list;
+
+ public:
+  BlockPool();
+  NodePtr alloc();
+  template <typename... Args>
+  NodePtr construct(Args... args);
+  void free(NodePtr ptr);
 };
 
 struct CCCounter {
@@ -82,7 +103,6 @@ struct CCCounter {
 };
 
 class ClientCache {
-  using NodePtr = KVBlock::NodePtr;
   using FuncUpdMeta = std::function<bool(const Slot &lslot, uint64_t raddr)>;
   using HashMap = std::unordered_map<std::string, NodePtr>;
 
@@ -90,6 +110,7 @@ class ClientCache {
   HashMap hash_map{};
   CCCounter cnter{};
   FuncUpdMeta callback_update_rmeta_{nullptr};
+  BlockPool block_pool;
 
   /* eviction */
   const CCEVICTION_OPTION EVICTION_USED{CCEVICTION};
@@ -98,6 +119,7 @@ class ClientCache {
 
  public:
   ClientCache();
+  ~ClientCache();
   void set_call_back(FuncUpdMeta call_back) {
     callback_update_rmeta_ = call_back;
   }
@@ -119,12 +141,10 @@ class ClientCache {
   void multi_evict(size_t n);
   void evict();
   // pick a victim, and maintain eviction structures inside
-  // TODO: return iterator instead
   NodePtr pick_evict();
 
   // insert
-  void insert(KVBlock::KeyType key, KVBlock::ValType val, const Slot &lslot,
-              uint64_t slot_raddr);
+  void insert(KeyType key, ValType val, const Slot &lslot, uint64_t slot_raddr);
 
   // LRU functions
   void lru_set_node_to_head(NodePtr n);
