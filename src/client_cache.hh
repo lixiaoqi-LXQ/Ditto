@@ -4,7 +4,7 @@
 // - optimize data structure of Key/Val: avoid copies of std::string
 // - use memory pool to manage KVBlocks
 
-#include <boost/shared_ptr.hpp>
+#include <boost/unordered/unordered_flat_map.hpp>
 #include <cassert>
 #include <cstring>
 #include <functional>
@@ -114,7 +114,7 @@ struct CCCounter {
 
 class ClientCache {
   using FuncUpdMeta = std::function<bool(const Slot &lslot, uint64_t raddr)>;
-  using HashMap = std::unordered_map<std::string, NodePtr>;
+  using HashMap = boost::unordered_flat_map<std::string, NodePtr>;
 
   /* core */
   HashMap hash_map{};
