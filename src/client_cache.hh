@@ -1,5 +1,10 @@
 #pragma once
 
+// TODO:
+// - optimize data structure of Key/Val: avoid copies of std::string
+// - use memory pool to manage KVBlocks
+
+#include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <cstring>
 #include <functional>
@@ -16,13 +21,15 @@
 #define USE_CLIENT_CACHE
 #define META_UPDATE_ON
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
-#define CCEVICTION DUMB_RANDOM
+#define CCEVICTION DUMB_SIMPLE
 
 class KVBlock {
  public:
-  using NodePtr = std::shared_ptr<KVBlock>;
+  using NodePtr = boost::shared_ptr<KVBlock>;
   using KeyType = std::string;
   using ValType = std::string;
+
+ private:
   using MetaType = struct {
     uint64_t raddr{0};
     Slot slot{};
@@ -44,7 +51,8 @@ class KVBlock {
  public:
   KVBlock() = default;
   KVBlock(const KVBlock &) = delete;
-  KVBlock(KeyType k, ValType v, uint64_t slot_raddr, const Slot &slot);
+  KVBlock(const KeyType &k, const ValType &v, const uint64_t &slot_raddr,
+          const Slot &slot);
 
   // functions for key value info
   const KeyType &get_key() const { return key; }

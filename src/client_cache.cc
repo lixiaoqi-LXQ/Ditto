@@ -1,5 +1,8 @@
 #include "client_cache.hh"
 
+#include <boost/smart_ptr/make_shared.hpp>
+#define make_shared boost::make_shared
+
 bool lcache_log_on = false;
 template <typename... Args>
 inline void lcache_log(const char *fmt, Args... arg) {
@@ -9,9 +12,8 @@ inline void lcache_log(const char *fmt, Args... arg) {
   printf(buf, arg...);
 }
 
-using std::make_shared;
-
-KVBlock::KVBlock(KeyType k, ValType v, uint64_t slot_raddr, const Slot &slot)
+KVBlock::KVBlock(const KeyType &k, const ValType &v, const uint64_t &slot_raddr,
+                 const Slot &slot)
     : key(k), val(v) {
   memcpy(&meta.slot, &slot, sizeof(Slot));
   memset(&meta.slot.meta.acc_info.acc_ts, 0, 3 * sizeof(uint64_t));
