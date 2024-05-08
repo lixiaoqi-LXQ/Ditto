@@ -7,7 +7,13 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories(src)
 include_directories(~/boost_1_82_0)
 
-set(CMAKE_BUILD_TYPE Debug)
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(use_shard_pqueue OFF CACHE BOOL "set USE_SHARD_PQUEUE")

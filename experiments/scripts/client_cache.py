@@ -23,6 +23,8 @@ num_CN = client_num // NUM_CLIENT_PER_NODE + (client_num % NUM_CLIENT_PER_NODE !
 workload_size = 10**7
 run_time = 20
 
+make_cmd_running_opt = {"CMAKE_BUILD_TYPE": "Release"}
+
 
 def ycsb_run_1_pass(cache_size: int, build=True):
     work_dir = f"{EXP_HOME}/experiments/ycsb_test"
@@ -36,12 +38,13 @@ def ycsb_run_1_pass(cache_size: int, build=True):
 
     # rebuild project
     if build:
+        make_cmd_running_opt["client_cache_limit"] = cache_size
         MAKE_CMD = get_make_cmd(
             build_dir,
             "sample-adaptive",
             "ycsb",
             None,
-            {"client_cache_limit": cache_size},
+            make_cmd_running_opt,
         )
         print(
             "build with cache size {}({}% workload)".format(
@@ -142,12 +145,13 @@ def real_workload_run(local_cache_size):
     all_res = {}
     for wl, cache_size in product(workload_list, cache_size_list):
         # All methods in this experiment use the same compile options
+        make_cmd_running_opt["client_cache_limit"] = cache_size
         MAKE_CMD = get_make_cmd(
             build_dir,
             "sample-adaptive",
             wl,
             cache_size,
-            {"client_cache_limit": local_cache_size},
+            make_cmd_running_opt,
         )
         print("building...")
         cmd_manager.execute_once(MAKE_CMD, hide=True)
