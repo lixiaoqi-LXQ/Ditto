@@ -1,7 +1,7 @@
 #include "client_cache.hh"
 
-#include <boost/smart_ptr/make_shared.hpp>
-#define make_shared boost::make_shared
+#include <boost/core/demangle.hpp>
+#include <map>
 
 bool lcache_log_on = false;
 template <typename... Args>
@@ -70,7 +70,7 @@ NodePtr BlockPool::select_one_valid_randomly() {
   return &blocks[idx];
 }
 
-ClientCache::ClientCache() {
+ClientCache::ClientCache(unsigned id) : cid(id) {
   switch (EVICTION_USED) {
     case LRU:
       lru_head = new KVBlock();
@@ -86,6 +86,7 @@ ClientCache::ClientCache() {
       abort();
   }
   hash_map.reserve(CLIENT_CACHE_LIMIT);
+  print_info();
 }
 
 ClientCache::~ClientCache() {
@@ -204,24 +205,21 @@ NodePtr ClientCache::pick_evict() {
 void ClientCache::evict() {
   evict_timer.start();
   cnter.num_evict++;
-  auto victim = pick_evict();
+  auto victim = pick_evict();  // @cost: 200ns
   lcache_log("evict %s (block ptr %p), access time %u",
              victim->get_key().c_str(), victim,
              victim->get_slot().meta.acc_info.freq);
-  auto iter = hash_map.find(victim->get_key());
-  assert(iter != hash_map.end());
-  NodePtr block_ptr = iter->second;
-  // lcache_log("evict %s, access time %u", iter->first.c_str(),
-  //            block_ptr->get_slot().meta.acc_info.freq);
   // only update for accessed data
-  if (block_ptr->get_slot().meta.acc_info.freq != 0) {
+  if (victim->get_slot().meta.acc_info.freq != 0) {
 #ifdef META_UPDATE_ON
-    callback_update_rmeta_(block_ptr->get_slot(), block_ptr->get_slot_raddr());
+    callback_update_rmeta_(victim->get_slot(),
+                           victim->get_slot_raddr());  // @cost: 500ns
 #endif
     cnter.num_update++;
   }
+  auto num_evicted = hash_map.erase(victim->get_key());  // @cost: 700ns
+  assert(num_evicted == 1);
   block_pool.free(victim);
-  hash_map.erase(iter);
   evict_timer.stop();
 }
 
@@ -267,13 +265,13 @@ void ClientCache::insert(const void *key, uint32_t key_len, const void *val,
 
 void ClientCache::insert(KeyType key, ValType val, const Slot &lslot,
                          uint64_t slot_raddr) {
-  insert_timer.start();
   if (CLIENT_CACHE_LIMIT == 0) return;
   assert(hash_map.size() <= CLIENT_CACHE_LIMIT);
   bool should_evcit = hash_map.size() == CLIENT_CACHE_LIMIT;
   if (should_evcit) evict();
   // multi_evict(CLIENT_CACHE_LIMIT * 0.01);
 
+  insert_timer.start();
   auto new_block = block_pool.construct(key, val, slot_raddr, lslot);
   hash_map.insert({key, new_block});
   switch (EVICTION_USED) {
@@ -324,4 +322,28 @@ void ClientCache::lru_print(const char *action) const {
     node = node->next();
   }
   printf("|\n");
+}
+
+static const std::map<CCEVICTION_OPTION, const char *> EvictionNameMap{
+    {DUMB_SIMPLE, "DUMB-SIMPLE"},
+    {DUMB_RANDOM, "DUMB-RANDOM"},
+    {LRU, "LRU"},
+};
+
+void ClientCache::print_info() const {
+  printf("Client Cache Config\n");
+#ifdef USE_CLIENT_CACHE
+  printf("\tClient ID : %u\n", cid);
+  printf("\tClient Cache Limit: %lld\n", CLIENT_CACHE_LIMIT);
+  printf("\tEviction Method: %s\n", EvictionNameMap.at(EVICTION_USED));
+  printf("\tHash Table Data Structure: %s\n",
+         boost::core::demangle(typeid(hash_map).name()).c_str());
+#ifdef META_UPDATE_ON
+  printf("\tShould Update Remote Metadata: true\n");
+#else
+  printf("\tShould Update Remote Metadata: false\n");
+#endif
+#else
+  printf("\tDo Not Use Client Cache\n");
+#endif
 }

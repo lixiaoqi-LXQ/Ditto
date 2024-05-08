@@ -4,7 +4,7 @@
 // - optimize data structure of Key/Val: avoid copies of std::string
 // - use memory pool to manage KVBlocks
 
-#include <boost/shared_ptr.hpp>
+#include <boost/unordered/unordered_flat_map.hpp>
 #include <cassert>
 #include <cstring>
 #include <functional>
@@ -12,6 +12,7 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 #include "dmc_table.h"
@@ -22,7 +23,7 @@
 #define USE_CLIENT_CACHE
 #define META_UPDATE_ON
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
-#define CCEVICTION DUMB_RANDOM
+#define CCEVICTION DUMB_SIMPLE
 
 class KVBlock;
 using NodePtr = KVBlock *;
@@ -94,13 +95,13 @@ class BlockPool {
  public:
   BlockPool();
 
-  NodePtr alloc();
+  inline NodePtr alloc();
   template <typename... Args>
-  NodePtr construct(Args... args);
+  inline NodePtr construct(Args... args);
 
-  void free(NodePtr ptr);
+  inline void free(NodePtr ptr);
 
-  NodePtr select_one_valid_randomly();
+  inline NodePtr select_one_valid_randomly();
 };
 
 struct CCCounter {
@@ -114,8 +115,12 @@ struct CCCounter {
 
 class ClientCache {
   using FuncUpdMeta = std::function<bool(const Slot &lslot, uint64_t raddr)>;
-  using HashMap = std::unordered_map<std::string, NodePtr>;
+  using HashMap =
+      std::conditional<CCEVICTION == DUMB_SIMPLE,
+                       std::unordered_map<KeyType, NodePtr>,
+                       boost::unordered_flat_map<KeyType, NodePtr>>::type;
 
+  const unsigned cid;
   /* core */
   HashMap hash_map{};
   CCCounter cnter{};
@@ -128,7 +133,7 @@ class ClientCache {
   NodePtr lru_head{nullptr}, lru_tail{nullptr};
 
  public:
-  ClientCache();
+  ClientCache(unsigned id);
   ~ClientCache();
   void set_call_back(FuncUpdMeta call_back) {
     callback_update_rmeta_ = call_back;
@@ -171,4 +176,5 @@ class ClientCache {
   void clear_times() {
     insert_timer.clear(), evict_timer.clear(), get_timer.clear();
   }
+  void print_info() const;
 };

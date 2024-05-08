@@ -3,8 +3,9 @@ cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 project(DMC LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(Boost REQUIRED)
+# find_package(Boost REQUIRED)
 include_directories(src)
+include_directories(~/boost_1_82_0)
 
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

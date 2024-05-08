@@ -16,7 +16,7 @@
 
 using namespace std::placeholders;
 
-DMCClient::DMCClient(const DMCConfig *conf) {
+DMCClient::DMCClient(const DMCConfig *conf) : local_cache(conf->server_id) {
   evict_bucket_cnt_.clear();
   srand(conf->server_id);
   my_sid_ = conf->server_id;
