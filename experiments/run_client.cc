@@ -1367,6 +1367,7 @@ void* client_ycsb(void* _args) {
   uint32_t seq = warmup_seq;
   uint32_t n_get = 0;
   uint32_t n_set = 0;
+  if (args->validate) lcache_log_on = true;
   // lcache_log_on = true;
   while (true) {
     uint32_t idx = seq % trans_wl.num_ops;

@@ -212,7 +212,6 @@ if __name__ == "__main__":
     if len(argv) > 1:
         times = int(argv[1])
         cache_size = 20 * workload_size * 0.01
-        # cache_size = 0
         hitrates, ncaches, p50s, p90s, p99s, p999s, tpts = [[] for _ in range(7)]
         for i in range(times):
             json_res = ycsb_run_1_pass(cache_size=cache_size, build=(i == 0))
