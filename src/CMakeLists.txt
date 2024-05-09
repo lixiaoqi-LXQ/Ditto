@@ -19,6 +19,7 @@ target_compile_definitions(libdmc PUBLIC
     HASH_BUCKET_ASSOC_NUM=${hash_bucket_assoc}LL
     HASH_NUM_BUCKETS=${hash_bucket_num}LL
     CLIENT_CACHE_LIMIT=${client_cache_limit}LL
+    CCEVICTION=${CCEVICTION}
 )
 
 if(use_shard_pqueue)

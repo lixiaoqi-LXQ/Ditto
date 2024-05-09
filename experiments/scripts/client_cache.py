@@ -2,6 +2,7 @@ import time
 import json
 import numpy as np
 
+from datetime import datetime, timedelta
 from sys import argv
 from itertools import product
 from utils.utils import save_time, save_res, dump_output
@@ -16,14 +17,23 @@ from cluster_setting import *
 from utils.plots import plot_fig15_16
 
 
-# config infomation
+# Ditto config
 workload = "ycsbc"
 client_num = 1
 num_CN = client_num // NUM_CLIENT_PER_NODE + (client_num % NUM_CLIENT_PER_NODE != 0)
 workload_size = 10**7
 run_time = 20
 
-make_cmd_running_opt = {"CMAKE_BUILD_TYPE": "Release"}
+# cmake config
+evcition_options = ["DUMB_RANDOM", "LRU", "DUMB_SIMPLE"]
+cmake_cmd_running_opt = {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CCEVICTION": evcition_options[0],
+}
+
+# time info
+start_datetime = datetime.now()
+single_time = timedelta(seconds=168)
 
 
 def ycsb_run_1_pass(cache_size: int, build=True):
@@ -38,13 +48,13 @@ def ycsb_run_1_pass(cache_size: int, build=True):
 
     # rebuild project
     if build:
-        make_cmd_running_opt["client_cache_limit"] = cache_size
+        cmake_cmd_running_opt["client_cache_limit"] = cache_size
         MAKE_CMD = get_make_cmd(
             build_dir,
             "sample-adaptive",
             "ycsb",
             None,
-            make_cmd_running_opt,
+            cmake_cmd_running_opt,
         )
         print(
             "build with cache size {}({}% workload)".format(
@@ -94,12 +104,12 @@ def ycsb_run_1_pass(cache_size: int, build=True):
         res = c_prom.join()
         dump_output(
             "stdout-client-client-cache",
-            f"===============client-{i+1}-stdout===============\n" + res.stdout,
+            f"===============CN{i+1}-stdout===============\n" + res.stdout,
             i != 0,
         )
     # wait MN
     res = mn_prom.join()
-    dump_output("stdout-server-client-cache", res.stdout)
+    # dump_output("stdout-server-client-cache", res.stdout)
 
     raw_res = controller_prom.join()
     line = raw_res.tail("stdout", 1).strip()
@@ -145,13 +155,13 @@ def real_workload_run(local_cache_size):
     all_res = {}
     for wl, cache_size in product(workload_list, cache_size_list):
         # All methods in this experiment use the same compile options
-        make_cmd_running_opt["client_cache_limit"] = cache_size
+        cmake_cmd_running_opt["client_cache_limit"] = cache_size
         MAKE_CMD = get_make_cmd(
             build_dir,
             "sample-adaptive",
             wl,
             cache_size,
-            make_cmd_running_opt,
+            cmake_cmd_running_opt,
         )
         print("building...")
         cmd_manager.execute_once(MAKE_CMD, hide=True)
@@ -242,13 +252,24 @@ if __name__ == "__main__":
     else:
         size_step = int(1 * workload_size * 0.01)
         start = size_step
-        end = int(100 * workload_size * 0.01 + size_step)
-        print("ready to run {} iters", len(range(start, end, size_step)))
-        for cache_size in range(start, end, size_step):
-            json_res = ycsb_run_1_pass(cache_size)
-            res[cache_size] = json_res
-    print(res)
-    save_res("client_cache", res)
+        end = int(80 * workload_size * 0.01 + size_step)
+        range_count = len(range(start, end, size_step))
+        option_count = len(evcition_options)
 
+        times = range_count * option_count
+        print(f"ready to run {times} iters, stop at {start_datetime+times*single_time}")
+        for i, evict_type in enumerate(evcition_options):
+            stop_time = datetime.now() + range_count * single_time
+            print(f"== test eviction method {evict_type}, stop at {stop_time}")
+            cmake_cmd_running_opt["CCEVICTION"] = evict_type
+            for cache_size in range(start, end, size_step):
+                json_res = ycsb_run_1_pass(cache_size)
+                print(json_res)
+                res[cache_size] = json_res
+            result_file = (
+                f"ycsbc_c{client_num}_evict_{evict_type}_w80r{run_time}_10w30w"
+            )
+            save_res(result_file, res)
+            print(f"result saved to {result_file}")
     et = time.time()
     save_time(argv[0], et - st)

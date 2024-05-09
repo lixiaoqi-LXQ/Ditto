@@ -23,7 +23,7 @@
 #define USE_CLIENT_CACHE
 #define META_UPDATE_ON
 enum CCEVICTION_OPTION { DUMB_SIMPLE, DUMB_RANDOM, LRU };
-#define CCEVICTION DUMB_SIMPLE
+// #define CCEVICTION LRU // now passed from outside
 
 class KVBlock;
 using NodePtr = KVBlock *;

@@ -240,6 +240,7 @@ cmake_templates = {
     "hash_bucket_num": "-Dhash_bucket_num={}",
     "client_cache_limit": "-Dclient_cache_limit={}",
     "CMAKE_BUILD_TYPE": "-DCMAKE_BUILD_TYPE={}",
+    "CCEVICTION": "-DCCEVICTION={}",
 }
 
 running_default_opt = {

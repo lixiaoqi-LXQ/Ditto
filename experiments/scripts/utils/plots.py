@@ -63,17 +63,19 @@ def plot_compare_three(
     plt.savefig(f"figs/latency-three-eviction.png")
     # tpt
     _, ax_tpt = plt.subplots()
+    RDMA_tpt_baseline = res_RDMA["tpt"] / 10**3
     ax_tpt.plot(cache_sizes, tpts[LRU], "b-", label="LRU")
     ax_tpt.plot(cache_sizes, tpts[DUMB_S], "g--", label="DUMB-SIMPLE")
     ax_tpt.plot(cache_sizes, tpts[DUMB_R], "k-.", label="DUMB-RANDOM")
-    ax_tpt.axhline(res_RDMA["tpt"] / 10**3, color="r", linestyle=":", label="RDMA")
+    ax_tpt.axhline(RDMA_tpt_baseline, color="lightcoral", linestyle=":", label="RDMA (1x)")
+    ax_tpt.axhline(RDMA_tpt_baseline * 2, color="lightcoral", linestyle=":", label="RDMA (2x)")
+    ax_tpt.axhline(RDMA_tpt_baseline * 4, color="lightcoral", linestyle=":", label="RDMA (4x)")
     ax_tpt.set_xlabel("Cache size (% workload)")
     ax_tpt.set_ylabel("Throughput (Kops/s)")
-    # ax_tpt.set_xticks(ticks=[10, 20, 30, 40, 50, 100, 150, 200])
     ax_tpt.set_xlim(left=cache_sizes[0], right=cache_sizes[-1])
     ax_tpt.set_ylim(bottom=0)
     ax_tpt.grid()
-    ax_tpt.legend()
+    ax_tpt.legend(ncol=2)
     plt.savefig(f"figs/tpt-three-eviction.png")
 
     # hit rate
